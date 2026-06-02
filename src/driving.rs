@@ -151,6 +151,27 @@ impl WheelContacts {
             self.rear_right.label()
         )
     }
+
+    pub fn average_lateral_grip(self, surfaces: &SurfaceLibrary) -> f32 {
+        let contacts = [
+            self.front_left,
+            self.front_right,
+            self.rear_left,
+            self.rear_right,
+        ];
+
+        contacts
+            .iter()
+            .map(|surface| surfaces.get(*surface).lateral_grip)
+            .sum::<f32>()
+            / contacts.len() as f32
+    }
+
+    pub fn split_surface(self) -> bool {
+        self.front_left != self.front_right
+            || self.front_left != self.rear_left
+            || self.front_left != self.rear_right
+    }
 }
 
 fn drive_car(
@@ -179,6 +200,7 @@ fn drive_car(
         let surface = surfaces.get(car.current_surface);
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
         car.wheel_contacts = sample_wheel_contacts(&physics, transform.translation, &basis);
+        let contact_lateral_grip = car.wheel_contacts.average_lateral_grip(&surfaces);
         car.signed_speed = basis.forward_speed;
         car.slip_angle = basis.slip_angle();
         car.drive_mode = model::drive_mode(controls.throttle, basis.forward_speed);
@@ -197,7 +219,7 @@ fn drive_car(
         car.velocity -= basis.right
             * basis.lateral_speed
             * tuning.lateral_grip
-            * surface.lateral_grip
+            * contact_lateral_grip
             * lateral_grip_multiplier
             * dt;
         car.velocity *= 1.0 / (1.0 + tuning.drag * surface.drag * surface.rolling_resistance * dt);

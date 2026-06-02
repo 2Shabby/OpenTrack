@@ -557,6 +557,7 @@ Procedural assembly has started:
 * In-run HUD shows driver, timer, checkpoint progress, speed, best time, and ghost time; verbose debug is toggled with F3.
 * Grass field, forest, and rocks are placed relative to generated track bounds instead of fixed world coordinates.
 * Track validation now checks empty tracks, missing finish, short pieces, zero-length segments, connections, and generated counts.
+* Four-wheel contact samples now affect lateral grip, so split-surface cases change handling.
 
 ## Pending Work
 
@@ -586,7 +587,7 @@ Pending:
 Pending:
 
 * continued tuning of reverse/brake/steering feel
-* use four wheel contacts for airborne checks and split-surface handling decisions
+* use four wheel contacts for airborne checks
 * tune the current drift assist across surface and speed cases
 * drift case matrix: brake-entered drift, throttle-held drift, counter-steer recovery, split-surface slide, ice slide, boost slide, reverse/no-drift
 * counter-steer and spin-out damping assist tuned for Trackmania-like readability
