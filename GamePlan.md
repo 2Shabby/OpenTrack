@@ -545,6 +545,7 @@ Procedural assembly has started:
 * Driving model now reports slip angle and grip/sliding state for drift tuning without changing handling yet.
 * App now starts at a basic main menu and enters gameplay through one `MainMenu -> Driving` state transition.
 * Track/session spawning now happens on entering `Driving`; generated scene cleanup is state-owned.
+* Escape opens an in-game pause overlay; resume preserves the active driving scene and main menu exits cleanly.
 
 ## Pending Work
 
@@ -552,7 +553,6 @@ Procedural assembly has started:
 
 Pending:
 
-* pause state/menu that preserves the active driving scene
 * hotseat player setup screen
 * track recipe/seed/length selection screen
 * car color selection screen

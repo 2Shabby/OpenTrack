@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::car_asset::sports_car_mesh;
 use crate::driving::PlayerCar;
-use crate::game_state::GameState;
+use crate::game_state::{GameState, not_paused};
 use crate::run::{RunState, RunStatus};
 use crate::track::SpawnedSceneEntity;
 
@@ -23,7 +23,7 @@ impl Plugin for GhostPlugin {
                     save_finished_ghost,
                     update_ghost_visual,
                 )
-                    .run_if(in_state(GameState::Driving)),
+                    .run_if(in_state(GameState::Driving).and(not_paused)),
             );
     }
 }

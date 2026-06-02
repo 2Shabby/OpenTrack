@@ -6,3 +6,12 @@ pub enum GameState {
     MainMenu,
     Driving,
 }
+
+#[derive(Resource, Default)]
+pub struct PauseState {
+    pub paused: bool,
+}
+
+pub fn not_paused(pause: Res<PauseState>) -> bool {
+    !pause.paused
+}
