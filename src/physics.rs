@@ -70,7 +70,7 @@ impl TrackPhysicsQueries for EcsTrackPhysicsQueries {
             .iter()
             .find(|zone| zone.contains(position))
             .map(|zone| zone.kind)
-            .unwrap_or(SurfaceKind::Asphalt)
+            .unwrap_or(SurfaceKind::Grass)
     }
 
     fn cast_car_shape(&self, position: Vec3, _velocity: Vec3) -> Option<CarHit> {

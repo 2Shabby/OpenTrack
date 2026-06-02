@@ -269,5 +269,6 @@ fn surface_color(surface: SurfaceKind) -> Color {
         SurfaceKind::Dirt => Color::srgb(0.45, 0.29, 0.16),
         SurfaceKind::Ice => Color::srgb(0.62, 0.85, 0.9),
         SurfaceKind::Boost => Color::srgb(0.95, 0.67, 0.12),
+        SurfaceKind::Grass => Color::srgb(0.16, 0.34, 0.13),
     }
 }

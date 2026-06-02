@@ -558,6 +558,7 @@ Procedural assembly has started:
 * Grass field, forest, and rocks are placed relative to generated track bounds instead of fixed world coordinates.
 * Track validation now checks empty tracks, missing finish, short pieces, zero-length segments, connections, and generated counts.
 * Four-wheel contact samples now affect lateral grip, so split-surface cases change handling.
+* Off-track fallback surface is now grass instead of asphalt, with slower acceleration and higher drag.
 
 ## Pending Work
 
@@ -577,7 +578,6 @@ Pending:
 * move more per-segment spawning into reusable piece-library data
 * expand generated piece sequences beyond simple straight/arc choices
 * improve curve piece variety and validation
-* better off-track behavior once border collision is stable
 * checkpoint and finish line placement for every future piece type
 * recipe controls for seed, length, surface mix, and difficulty
 * add overlap and unreachable-finish validation once routes become more complex

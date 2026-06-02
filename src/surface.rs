@@ -16,6 +16,7 @@ pub enum SurfaceKind {
     Dirt,
     Ice,
     Boost,
+    Grass,
 }
 
 impl SurfaceKind {
@@ -25,6 +26,7 @@ impl SurfaceKind {
             Self::Dirt => "dirt",
             Self::Ice => "ice",
             Self::Boost => "boost",
+            Self::Grass => "grass",
         }
     }
 }
@@ -46,6 +48,7 @@ pub struct SurfaceLibrary {
     dirt: SurfaceParams,
     ice: SurfaceParams,
     boost: SurfaceParams,
+    grass: SurfaceParams,
 }
 
 impl Default for SurfaceLibrary {
@@ -87,6 +90,15 @@ impl Default for SurfaceLibrary {
                 drag: 0.75,
                 boost_force: 32.0,
             },
+            grass: SurfaceParams {
+                longitudinal_grip: 0.62,
+                lateral_grip: 0.48,
+                rolling_resistance: 1.8,
+                acceleration_multiplier: 0.58,
+                steering_multiplier: 0.7,
+                drag: 1.65,
+                boost_force: 0.0,
+            },
         }
     }
 }
@@ -98,6 +110,7 @@ impl SurfaceLibrary {
             SurfaceKind::Dirt => self.dirt,
             SurfaceKind::Ice => self.ice,
             SurfaceKind::Boost => self.boost,
+            SurfaceKind::Grass => self.grass,
         }
     }
 }
