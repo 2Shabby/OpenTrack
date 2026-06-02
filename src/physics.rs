@@ -3,7 +3,8 @@ use bevy::prelude::*;
 use crate::spatial::OrientedRect;
 use crate::surface::{SurfaceKind, SurfaceZone};
 
-const CAR_COLLISION_HALF_EXTENTS: Vec2 = Vec2::new(0.98, 2.05);
+const CAR_COLLISION_LATERAL_HALF_EXTENT: f32 = 0.98;
+const RAIL_END_TOLERANCE: f32 = 0.15;
 
 pub struct PhysicsQueriesPlugin;
 
@@ -90,7 +91,7 @@ impl RailColliderSample {
     fn collide_car(self, position: Vec3) -> Option<CarHit> {
         let overlap = self.bounds.overlap_point(
             Vec2::new(position.x, position.z),
-            CAR_COLLISION_HALF_EXTENTS,
+            Vec2::new(CAR_COLLISION_LATERAL_HALF_EXTENT, RAIL_END_TOLERANCE),
         )?;
 
         Some(CarHit {

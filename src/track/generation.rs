@@ -36,7 +36,6 @@ pub struct GeneratedTrackInfo {
 #[derive(Clone, Copy, Debug)]
 pub enum TrackPieceKind {
     Straight,
-    Curve,
     Checkpoint(usize),
     Finish,
 }
@@ -74,18 +73,12 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
 
     (0..piece_count)
         .map(|index| {
-            let yaw_delta = if index > 0 && index < piece_count - 1 {
-                generated_yaw_delta(&mut rng)
-            } else {
-                0.0
-            };
-            let exit_yaw = (entry.yaw + yaw_delta).clamp(-0.55, 0.55);
-            let piece_yaw = average_angle(entry.yaw, exit_yaw);
+            let piece_yaw = entry.yaw;
             let exit = Pose2::new(
                 entry.position + Pose2::new(Vec2::ZERO, piece_yaw).forward() * PIECE_LENGTH,
-                exit_yaw,
+                entry.yaw,
             );
-            let kind = piece_kind(index, piece_count, checkpoint_index, yaw_delta);
+            let kind = piece_kind(index, piece_count, checkpoint_index);
             let surface = match kind {
                 TrackPieceKind::Finish => SurfaceKind::Boost,
                 _ => generated_surface(&mut rng),
@@ -110,6 +103,27 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
         .collect()
 }
 
+pub fn validate_piece_connections(pieces: &[TrackPiece]) -> Result<(), String> {
+    for (index, pair) in pieces.windows(2).enumerate() {
+        let previous = pair[0];
+        let next = pair[1];
+        let gap = previous.exit.position.distance(next.entry.position);
+        let yaw_delta = (previous.exit.yaw - next.entry.yaw).abs();
+
+        if gap > 0.001 || yaw_delta > 0.001 {
+            return Err(format!(
+                "piece {} -> {} has gap {:.4} and yaw delta {:.4}",
+                index,
+                index + 1,
+                gap,
+                yaw_delta
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 pub fn car_spawn_for(pieces: &[TrackPiece]) -> CarSpawn {
     let Some(first_piece) = pieces.first() else {
         return CarSpawn::default();
@@ -126,18 +140,11 @@ pub fn forward_2d(yaw: f32) -> Vec2 {
     Pose2::new(Vec2::ZERO, yaw).forward()
 }
 
-fn piece_kind(
-    index: usize,
-    piece_count: usize,
-    checkpoint_index: usize,
-    yaw_delta: f32,
-) -> TrackPieceKind {
+fn piece_kind(index: usize, piece_count: usize, checkpoint_index: usize) -> TrackPieceKind {
     if index == piece_count - 1 {
         TrackPieceKind::Finish
     } else if index == checkpoint_index {
         TrackPieceKind::Checkpoint(0)
-    } else if yaw_delta.abs() > 0.01 {
-        TrackPieceKind::Curve
     } else {
         TrackPieceKind::Straight
     }
@@ -150,18 +157,4 @@ fn generated_surface(rng: &mut ChaCha8Rng) -> SurfaceKind {
         8 => SurfaceKind::Ice,
         _ => SurfaceKind::Boost,
     }
-}
-
-fn generated_yaw_delta(rng: &mut ChaCha8Rng) -> f32 {
-    match rng.random_range(0..5) {
-        0 => -0.18,
-        1 => 0.18,
-        _ => 0.0,
-    }
-}
-
-fn average_angle(a: f32, b: f32) -> f32 {
-    let x = a.cos() + b.cos();
-    let y = a.sin() + b.sin();
-    y.atan2(x)
 }

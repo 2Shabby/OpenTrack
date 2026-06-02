@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use super::generation::{
     GeneratedTrackInfo, PIECE_LENGTH, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece,
-    TrackPieceKind, TrackRecipe, car_spawn_for, generate_track_pieces,
+    TrackPieceKind, TrackRecipe, car_spawn_for, generate_track_pieces, validate_piece_connections,
 };
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::sports_car_mesh;
@@ -23,6 +23,9 @@ pub fn spawn_generated_track(
     spawn_forest_scenery(&mut commands, asset_server, &mut meshes, &mut materials);
 
     let pieces = generate_track_pieces(recipe);
+    if let Err(error) = validate_piece_connections(&pieces) {
+        warn!("generated track connection validation failed: {error}");
+    }
     let checkpoint_count = TrackPiece::checkpoint_count(&pieces);
     let car_spawn = car_spawn_for(&pieces);
 
@@ -171,7 +174,7 @@ fn spawn_camera(commands: &mut Commands, car_spawn: CarSpawn) {
 
 fn trigger_for_piece(piece: TrackPiece) -> Option<(TrackTriggerKind, Color, Pose2)> {
     match piece.kind {
-        TrackPieceKind::Straight | TrackPieceKind::Curve => None,
+        TrackPieceKind::Straight => None,
         TrackPieceKind::Checkpoint(index) => Some((
             TrackTriggerKind::Checkpoint(index),
             Color::srgb(0.15, 0.48, 1.0),

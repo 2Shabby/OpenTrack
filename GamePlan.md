@@ -469,13 +469,13 @@ Procedural assembly has started:
 * `TrackRecipe` owns seed and piece count.
 * Startup track pieces are generated deterministically from recipe + seed.
 * Surfaces are assigned by deterministic RNG.
-* Piece yaw is generated with small deterministic deltas to create gentle curve sequences.
 * Surface zones, rail colliders, and checkpoint/finish triggers now use oriented bounds.
 * Track generation now stores explicit entry/exit transforms per piece to keep adjacent pieces and lines aligned.
 * Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
 * Shared spatial types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
 * Surface zones, rail colliders, triggers, and track pieces no longer carry parallel center/yaw/extent conventions.
 * Physics query results, hotseat state, ghost samples, and car reset semantics have been narrowed to the minimum current API.
+* Generated tracks intentionally use straight modules only until real curved road geometry/colliders are implemented.
 * The generated track keeps one checkpoint and one finish for the current run-loop contract.
 * Debug overlay shows generated seed and piece count.
 
