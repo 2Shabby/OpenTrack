@@ -6,6 +6,7 @@ pub enum GameState {
     MainMenu,
     Setup,
     Driving,
+    Results,
 }
 
 #[derive(Resource, Default)]

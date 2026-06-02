@@ -66,6 +66,21 @@ impl HotseatSession {
             .map(|entry| (entry.player_name.as_str(), entry.finish_time))
     }
 
+    pub fn leaderboard_lines(&self) -> Vec<String> {
+        self.leaderboard
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| {
+                format!(
+                    "{}. {} {:.2}",
+                    index + 1,
+                    entry.player_name,
+                    entry.finish_time
+                )
+            })
+            .collect()
+    }
+
     pub fn configure_player_count(&mut self, player_count: usize) {
         let player_count = player_count.max(1);
         self.players = (1..=player_count)
@@ -84,7 +99,7 @@ impl HotseatSession {
         });
     }
 
-    fn advance_player(&mut self) {
+    pub fn advance_player(&mut self) {
         self.current_player = (self.current_player + 1) % self.players.len();
     }
 }
