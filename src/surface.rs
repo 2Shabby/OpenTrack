@@ -13,7 +13,6 @@ pub enum SurfaceKind {
     Asphalt,
     Dirt,
     Ice,
-    Slowdown,
     Boost,
 }
 
@@ -23,7 +22,6 @@ impl SurfaceKind {
             Self::Asphalt => "asphalt",
             Self::Dirt => "dirt",
             Self::Ice => "ice",
-            Self::Slowdown => "slowdown",
             Self::Boost => "boost",
         }
     }
@@ -45,7 +43,6 @@ pub struct SurfaceLibrary {
     asphalt: SurfaceParams,
     dirt: SurfaceParams,
     ice: SurfaceParams,
-    slowdown: SurfaceParams,
     boost: SurfaceParams,
 }
 
@@ -79,15 +76,6 @@ impl Default for SurfaceLibrary {
                 drag: 0.72,
                 boost_force: 0.0,
             },
-            slowdown: SurfaceParams {
-                longitudinal_grip: 0.78,
-                lateral_grip: 0.7,
-                rolling_resistance: 2.2,
-                acceleration_multiplier: 0.5,
-                steering_multiplier: 0.72,
-                drag: 2.4,
-                boost_force: 0.0,
-            },
             boost: SurfaceParams {
                 longitudinal_grip: 1.0,
                 lateral_grip: 0.92,
@@ -107,7 +95,6 @@ impl SurfaceLibrary {
             SurfaceKind::Asphalt => self.asphalt,
             SurfaceKind::Dirt => self.dirt,
             SurfaceKind::Ice => self.ice,
-            SurfaceKind::Slowdown => self.slowdown,
             SurfaceKind::Boost => self.boost,
         }
     }
@@ -118,21 +105,4 @@ pub struct SurfaceZone {
     pub kind: SurfaceKind,
     pub center: Vec2,
     pub half_extents: Vec2,
-}
-
-impl SurfaceZone {
-    pub fn contains(&self, position: Vec3) -> bool {
-        let dx = (position.x - self.center.x).abs();
-        let dz = (position.z - self.center.y).abs();
-
-        dx <= self.half_extents.x && dz <= self.half_extents.y
-    }
-}
-
-pub fn surface_at(position: Vec3, zones: &Query<&SurfaceZone>) -> SurfaceKind {
-    zones
-        .iter()
-        .find(|zone| zone.contains(position))
-        .map(|zone| zone.kind)
-        .unwrap_or(SurfaceKind::Asphalt)
 }

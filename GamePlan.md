@@ -121,7 +121,7 @@ grounded/airborne state
 current surface
 throttle/brake/steer input
 slip/drift state
-boost/slowdown state
+surface effect state
 reset state
 ```
 
@@ -161,7 +161,6 @@ Core surfaces:
 * asphalt
 * dirt
 * ice
-* grass/slowdown
 * boost
 
 Surface parameters:
@@ -465,7 +464,7 @@ Milestone 2 has started:
 * surface definitions and zones added in `src/surface.rs`
 * fixed timestep driving enabled at 60 Hz
 * simple Bevy UI debug overlay added in `src/debug.rs`
-* asphalt, dirt, ice, slowdown, and boost strips added to the sandbox
+* asphalt, dirt, ice, and boost surfaces added to the sandbox
 * A/D steering corrected from the first playtest feedback
 
 ## Third Code Slice
@@ -479,6 +478,25 @@ Milestone 4 has a first session-only pass:
 * finish requires checkpoint progress first
 
 This deliberately does not add save-game mechanics, persisted best times, or shared tracks.
+
+## Fourth Code Slice
+
+Milestone 3 has started:
+
+* `src/track.rs` owns the sandbox track definition and spawning
+* track pieces are represented as explicit data with kind, surface, center, and yaw
+* primitive side-by-side surface strips were replaced with a connected straight piece chain
+* checkpoint and finish triggers are now attached to track-piece definitions
+* slowdown/grass was removed from the active surface set to keep surface differences distinct
+
+## Fifth Code Slice
+
+The physics-query boundary now exists:
+
+* `src/physics.rs` defines `TrackPhysicsQueries`, `GroundHit`, and `CarHit`
+* the initial implementation queries ECS `SurfaceZone` components
+* driving asks the physics layer for current surface instead of calling surface lookup directly
+* car shape casting is intentionally stubbed until wall/floor collision work starts
 
 ## Milestones
 
@@ -494,7 +512,7 @@ The car is controllable and fun enough to keep testing.
 
 ### 2. Surface Handling
 
-Asphalt, dirt, ice, slowdown, boost, with debug tuning.
+Asphalt, dirt, ice, boost, with debug tuning.
 
 Success condition:
 

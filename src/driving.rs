@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 
-use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone, surface_at};
+use crate::physics::{EcsTrackPhysicsQueries, TrackPhysicsQueries};
+use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
 
-pub const CAR_START: Vec3 = Vec3::new(0.0, 0.35, -14.0);
+pub const CAR_START: Vec3 = Vec3::new(0.0, 0.35, -26.0);
 
 pub struct DrivingPlugin;
 
@@ -74,6 +75,7 @@ fn drive_car(
     mut cars: Query<(&mut Transform, &mut PlayerCar)>,
 ) {
     let dt = time.delta_secs();
+    let physics = EcsTrackPhysicsQueries::new(&zones);
 
     for (mut transform, mut car) in &mut cars {
         if keys.just_pressed(KeyCode::KeyR) {
@@ -92,7 +94,7 @@ fn drive_car(
         );
         car.throttle = throttle;
         car.steer = steer;
-        car.current_surface = surface_at(transform.translation, &zones);
+        car.current_surface = physics.surface_at(transform.translation);
 
         let surface = surfaces.get(car.current_surface);
         let forward = Vec3::new(car.yaw.sin(), 0.0, car.yaw.cos());
