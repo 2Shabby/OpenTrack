@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-use crate::spatial::OrientedRect;
+use crate::spatial::{OrientedRect, rotate_2d};
 use crate::surface::{SurfaceKind, SurfaceZone};
 
 const CAR_COLLISION_LATERAL_HALF_EXTENT: f32 = 0.98;
-const RAIL_END_TOLERANCE: f32 = 0.15;
+const CAR_COLLISION_LONGITUDINAL_HALF_EXTENT: f32 = 2.0;
 
 pub struct PhysicsQueriesPlugin;
 
@@ -89,14 +89,30 @@ impl SurfaceZoneSample {
 
 impl RailColliderSample {
     fn collide_car(self, position: Vec3) -> Option<CarHit> {
-        let overlap = self.bounds.overlap_point(
-            Vec2::new(position.x, position.z),
-            Vec2::new(CAR_COLLISION_LATERAL_HALF_EXTENT, RAIL_END_TOLERANCE),
-        )?;
+        let local = self
+            .bounds
+            .pose
+            .world_to_local(Vec2::new(position.x, position.z));
+        let expanded = self.bounds.half_extents
+            + Vec2::new(
+                CAR_COLLISION_LATERAL_HALF_EXTENT,
+                CAR_COLLISION_LONGITUDINAL_HALF_EXTENT,
+            );
+
+        if local.x.abs() > expanded.x || local.y.abs() > expanded.y {
+            return None;
+        }
+
+        let local_normal = Vec2::new(signum_or_one(local.x), 0.0);
+        let normal = rotate_2d(local_normal, self.bounds.pose.yaw);
 
         Some(CarHit {
-            normal: Vec3::new(overlap.normal.x, 0.0, overlap.normal.y),
-            penetration: overlap.penetration,
+            normal: Vec3::new(normal.x, 0.0, normal.y),
+            penetration: expanded.x - local.x.abs(),
         })
     }
+}
+
+fn signum_or_one(value: f32) -> f32 {
+    if value >= 0.0 { 1.0 } else { -1.0 }
 }
