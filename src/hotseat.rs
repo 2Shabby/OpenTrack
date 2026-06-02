@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::driving::{CAR_START, PlayerCar};
+use crate::driving::{CarSpawn, PlayerCar};
 use crate::run::{RunState, RunStatus};
 
 pub struct HotseatPlugin;
@@ -89,6 +89,7 @@ fn hotseat_controls(
     keys: Res<ButtonInput<KeyCode>>,
     mut run: ResMut<RunState>,
     mut hotseat: ResMut<HotseatSession>,
+    car_spawn: Res<CarSpawn>,
     mut car: Single<(&mut Transform, &mut PlayerCar)>,
 ) {
     if keys.just_pressed(KeyCode::KeyP) && run.status == RunStatus::Waiting {
@@ -104,6 +105,7 @@ fn hotseat_controls(
 
     let (transform, car) = &mut *car;
     **car = PlayerCar::default();
-    transform.translation = CAR_START;
-    transform.rotation = Quat::IDENTITY;
+    transform.translation = car_spawn.translation;
+    transform.rotation = Quat::from_rotation_y(car_spawn.yaw);
+    car.yaw = car_spawn.yaw;
 }

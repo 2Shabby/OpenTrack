@@ -1,7 +1,9 @@
 use bevy::prelude::*;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 use crate::car_asset::sports_car_mesh;
-use crate::driving::{CAR_START, ChaseCamera, PlayerCar};
+use crate::driving::{CarSpawn, ChaseCamera, PlayerCar};
 use crate::physics::RailCollider;
 use crate::run::{TrackTrigger, TrackTriggerKind};
 use crate::surface::{SurfaceKind, SurfaceZone};
@@ -14,12 +16,37 @@ const RAIL_THICKNESS: f32 = 0.28;
 pub struct TrackPlugin;
 
 impl Plugin for TrackPlugin {
-    fn build(&self, _app: &mut App) {}
+    fn build(&self, app: &mut App) {
+        app.insert_resource(TrackRecipe::default());
+    }
+}
+
+#[derive(Resource)]
+pub struct TrackRecipe {
+    pub seed: u64,
+    pub piece_count: usize,
+}
+
+impl Default for TrackRecipe {
+    fn default() -> Self {
+        Self {
+            seed: 0x5EED_2026,
+            piece_count: 8,
+        }
+    }
+}
+
+#[derive(Resource)]
+pub struct GeneratedTrackInfo {
+    pub seed: u64,
+    pub piece_count: usize,
+    pub checkpoint_count: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum TrackPieceKind {
     Straight,
+    Curve,
     Checkpoint(usize),
     Finish,
 }
@@ -40,6 +67,7 @@ impl TrackPieceDefinition {
 
 pub fn spawn_sandbox_track(
     mut commands: Commands,
+    recipe: Res<TrackRecipe>,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -47,40 +75,98 @@ pub fn spawn_sandbox_track(
     spawn_grass_field(&mut commands, &mut meshes, &mut materials);
     spawn_forest_scenery(&mut commands, &asset_server, &mut meshes, &mut materials);
 
-    let pieces = [
-        TrackPieceDefinition {
-            kind: TrackPieceKind::Straight,
-            surface: SurfaceKind::Asphalt,
-            center: Vec3::new(0.0, 0.0, -21.0),
-            yaw: 0.0,
-        },
-        TrackPieceDefinition {
-            kind: TrackPieceKind::Checkpoint(0),
-            surface: SurfaceKind::Dirt,
-            center: Vec3::new(0.0, 0.0, -7.0),
-            yaw: 0.0,
-        },
-        TrackPieceDefinition {
-            kind: TrackPieceKind::Straight,
-            surface: SurfaceKind::Ice,
-            center: Vec3::new(0.0, 0.0, 7.0),
-            yaw: 0.0,
-        },
-        TrackPieceDefinition {
-            kind: TrackPieceKind::Finish,
-            surface: SurfaceKind::Boost,
-            center: Vec3::new(0.0, 0.0, 21.0),
-            yaw: 0.0,
-        },
-    ];
+    let pieces = generate_track_pieces(&recipe);
+    let checkpoint_count = pieces
+        .iter()
+        .filter(|piece| matches!(piece.kind, TrackPieceKind::Checkpoint(_)))
+        .count();
+    let car_spawn = car_spawn_for(&pieces);
 
-    for piece in pieces {
+    for piece in pieces.iter().copied() {
         spawn_piece(&mut commands, &mut meshes, &mut materials, piece);
     }
 
-    spawn_car(&mut commands, &mut meshes, &mut materials);
+    commands.insert_resource(GeneratedTrackInfo {
+        seed: recipe.seed,
+        piece_count: pieces.len(),
+        checkpoint_count,
+    });
+    commands.insert_resource(car_spawn);
+
+    spawn_car(&mut commands, &mut meshes, &mut materials, car_spawn);
     spawn_lighting(&mut commands);
-    spawn_camera(&mut commands);
+    spawn_camera(&mut commands, car_spawn);
+}
+
+fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPieceDefinition> {
+    let piece_count = recipe.piece_count.max(4);
+    let checkpoint_index = piece_count / 2;
+    let mut rng = ChaCha8Rng::seed_from_u64(recipe.seed);
+    let mut cursor = Vec2::new(0.0, -((piece_count as f32) * PIECE_LENGTH * 0.5));
+    let mut yaw = 0.0;
+
+    (0..piece_count)
+        .map(|index| {
+            if index > 0 && index < piece_count - 1 {
+                yaw = (yaw + generated_yaw_delta(&mut rng)).clamp(-0.55, 0.55);
+            }
+
+            let forward = forward_2d(yaw);
+            let center = cursor + forward * (PIECE_LENGTH * 0.5);
+            cursor += forward * PIECE_LENGTH;
+
+            let kind = if index == piece_count - 1 {
+                TrackPieceKind::Finish
+            } else if index == checkpoint_index {
+                TrackPieceKind::Checkpoint(0)
+            } else if yaw.abs() > 0.05 {
+                TrackPieceKind::Curve
+            } else {
+                TrackPieceKind::Straight
+            };
+            let surface = match kind {
+                TrackPieceKind::Finish => SurfaceKind::Boost,
+                _ => generated_surface(&mut rng),
+            };
+
+            TrackPieceDefinition {
+                kind,
+                surface,
+                center: Vec3::new(center.x, 0.0, center.y),
+                yaw,
+            }
+        })
+        .collect()
+}
+
+fn generated_surface(rng: &mut ChaCha8Rng) -> SurfaceKind {
+    match rng.random_range(0..10) {
+        0..=5 => SurfaceKind::Asphalt,
+        6..=7 => SurfaceKind::Dirt,
+        8 => SurfaceKind::Ice,
+        _ => SurfaceKind::Boost,
+    }
+}
+
+fn generated_yaw_delta(rng: &mut ChaCha8Rng) -> f32 {
+    match rng.random_range(0..5) {
+        0 => -0.18,
+        1 => 0.18,
+        _ => 0.0,
+    }
+}
+
+fn car_spawn_for(pieces: &[TrackPieceDefinition]) -> CarSpawn {
+    let Some(first_piece) = pieces.first() else {
+        return CarSpawn::default();
+    };
+    let start = Vec2::new(first_piece.center.x, first_piece.center.z)
+        - forward_2d(first_piece.yaw) * (PIECE_LENGTH * 0.42);
+
+    CarSpawn {
+        translation: Vec3::new(start.x, 0.05, start.y),
+        yaw: first_piece.yaw,
+    }
 }
 
 fn spawn_piece(
@@ -104,6 +190,7 @@ fn spawn_piece(
             kind: piece.surface,
             center: Vec2::new(piece.center.x, piece.center.z),
             half_extents: bounds,
+            yaw: piece.yaw,
         },
     ));
 
@@ -124,18 +211,18 @@ fn spawn_rails(
     });
 
     for side in [-1.0, 1.0] {
-        let center = Vec2::new(
-            side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5),
-            piece.center.z,
-        );
+        let local = Vec2::new(side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5), 0.0);
+        let center = Vec2::new(piece.center.x, piece.center.z) + rotate_2d(local, piece.yaw);
 
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, PIECE_LENGTH))),
             MeshMaterial3d(rail_material.clone()),
-            Transform::from_xyz(center.x, RAIL_HEIGHT * 0.5, center.y),
+            Transform::from_xyz(center.x, RAIL_HEIGHT * 0.5, center.y)
+                .with_rotation(Quat::from_rotation_y(piece.yaw)),
             RailCollider {
                 center,
                 half_extents: Vec2::new(RAIL_THICKNESS * 0.5, PIECE_LENGTH * 0.5),
+                yaw: piece.yaw,
             },
         ));
     }
@@ -152,7 +239,8 @@ fn spawn_trigger(
     };
 
     let half_extents = Vec2::new(TRACK_WIDTH * 0.5, 0.45);
-    let z = piece.center.z + PIECE_LENGTH * 0.4;
+    let center = Vec2::new(piece.center.x, piece.center.z)
+        + rotate_2d(Vec2::new(0.0, PIECE_LENGTH * 0.4), piece.yaw);
 
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(
@@ -165,11 +253,13 @@ fn spawn_trigger(
             emissive: color.into(),
             ..default()
         })),
-        Transform::from_xyz(piece.center.x, 0.04, z),
+        Transform::from_xyz(center.x, 0.04, center.y)
+            .with_rotation(Quat::from_rotation_y(piece.yaw)),
         TrackTrigger {
             kind,
-            center: Vec2::new(piece.center.x, z),
+            center,
             half_extents,
+            yaw: piece.yaw,
         },
     ));
 }
@@ -178,6 +268,7 @@ fn spawn_car(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    car_spawn: CarSpawn,
 ) {
     commands.spawn((
         Mesh3d(meshes.add(sports_car_mesh())),
@@ -187,7 +278,8 @@ fn spawn_car(
             perceptual_roughness: 0.45,
             ..default()
         })),
-        Transform::from_translation(CAR_START),
+        Transform::from_translation(car_spawn.translation)
+            .with_rotation(Quat::from_rotation_y(car_spawn.yaw)),
         PlayerCar::default(),
     ));
 }
@@ -352,23 +444,39 @@ fn spawn_lighting(commands: &mut Commands) {
     ));
 }
 
-fn spawn_camera(commands: &mut Commands) {
+fn spawn_camera(commands: &mut Commands, car_spawn: CarSpawn) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 6.5, -32.0).looking_at(CAR_START, Vec3::Y),
+        Transform::from_translation(
+            car_spawn.translation - forward_3d(car_spawn.yaw) * 6.0 + Vec3::Y * 6.5,
+        )
+        .looking_at(car_spawn.translation, Vec3::Y),
         ChaseCamera,
     ));
 }
 
 fn trigger_for_piece(kind: TrackPieceKind) -> Option<(TrackTriggerKind, Color)> {
     match kind {
-        TrackPieceKind::Straight => None,
+        TrackPieceKind::Straight | TrackPieceKind::Curve => None,
         TrackPieceKind::Checkpoint(index) => Some((
             TrackTriggerKind::Checkpoint(index),
             Color::srgb(0.15, 0.48, 1.0),
         )),
         TrackPieceKind::Finish => Some((TrackTriggerKind::Finish, Color::srgb(1.0, 1.0, 1.0))),
     }
+}
+
+fn forward_2d(yaw: f32) -> Vec2 {
+    Vec2::new(yaw.sin(), yaw.cos())
+}
+
+fn forward_3d(yaw: f32) -> Vec3 {
+    Vec3::new(yaw.sin(), 0.0, yaw.cos())
+}
+
+fn rotate_2d(value: Vec2, angle: f32) -> Vec2 {
+    let (sin, cos) = angle.sin_cos();
+    Vec2::new(value.x * cos - value.y * sin, value.x * sin + value.y * cos)
 }
 
 fn surface_color(surface: SurfaceKind) -> Color {

@@ -421,24 +421,9 @@ Early module responsibilities:
 * `ghost`: transform sampling, playback entity spawning, replay serialization.
 * `debug`: lightweight Bevy UI now; egui tuning panels later if the controls outgrow text.
 
-## First Code Slice
+## Implementation Status
 
-The repository now starts with Milestone 1 instead of remaining only a plan:
-
-```text
-Cargo.toml
-src/main.rs
-```
-
-Milestone 1 implementation scope:
-
-* one controllable car
-* flat driving plane
-* throttle/brake/reverse
-* speed-scaled steering
-* lateral grip approximation
-* chase camera
-* reset with `R`
+Current working prototype:
 
 Controls:
 
@@ -452,113 +437,42 @@ P                 add local hotseat player while waiting
 N                 next hotseat player after finish
 ```
 
-Next code changes after this slice:
+Implemented systems:
 
-* Split debug tuning values into editable resources or RON assets once values settle.
-* Start replacing primitive planes with authored modular track pieces.
-* Add a `physics` abstraction module before any Avian-specific gameplay code is written.
+* Bevy/Rust app scaffold with fixed timestep driving.
+* Layered arcade driving model with explicit forward/braking/reverse modes.
+* Data-driven surfaces: asphalt, dirt, ice, boost.
+* Project-owned physics-query boundary for ground/surface and rail collision.
+* Modular track piece spawning with rails, checkpoint triggers, and finish triggers.
+* Session timer, checkpoint progress, restart, hotseat players, in-memory leaderboard, and session-only ghost replay.
+* Realistic sports-car mesh from `~/Downloads/Realistic Car Pack - Nov 2018.zip`.
+* Off-track grass/forest scenery using textures from `~/Downloads/LowpolyForestPack.zip`.
+* Debug overlay for seed, pieces, player state, run state, speed, signed speed, drive mode, surface, and tuning values.
 
-## Second Code Slice
+Current constraints:
 
-Milestone 2 has started:
+* No save-game mechanics, persisted best times, player profiles, or shared-track storage.
+* Forest FBX files are not loaded directly; scenery uses generated low-poly geometry with the pack textures.
+* Generated tracks are currently straight piece chains only.
 
-* driving systems moved into `src/driving.rs`
-* surface definitions and zones added in `src/surface.rs`
-* fixed timestep driving enabled at 60 Hz
-* simple Bevy UI debug overlay added in `src/debug.rs`
-* asphalt, dirt, ice, and boost surfaces added to the sandbox
-* A/D steering corrected from the first playtest feedback
+Next code changes:
 
-## Third Code Slice
+* Expand procedural assembly from fixed straight chain to generated piece sequences.
+* Add simple curve pieces with matching collision/trigger bounds.
+* Add recipe controls for length, surface mix, and seed.
+* Split tuning values into editable resources or RON assets once values settle.
 
-Milestone 4 has a first session-only pass:
+## Current Code Slice
 
-* `src/run.rs` tracks waiting/running/finished run state
-* run timer starts when the car begins moving
-* `R` resets car and run state
-* one checkpoint trigger and one finish trigger are spawned in the sandbox
-* finish requires checkpoint progress first
+Procedural assembly has started:
 
-This deliberately does not add save-game mechanics, persisted best times, or shared tracks.
-
-## Fourth Code Slice
-
-Milestone 3 has started:
-
-* `src/track.rs` owns the sandbox track definition and spawning
-* track pieces are represented as explicit data with kind, surface, center, and yaw
-* primitive side-by-side surface strips were replaced with a connected straight piece chain
-* checkpoint and finish triggers are now attached to track-piece definitions
-* slowdown/grass was removed from the active surface set to keep surface differences distinct
-
-## Fifth Code Slice
-
-The physics-query boundary now exists:
-
-* `src/physics.rs` defines `TrackPhysicsQueries`, `GroundHit`, and `CarHit`
-* the initial implementation queries ECS `SurfaceZone` components
-* driving asks the physics layer for current surface instead of calling surface lookup directly
-* car shape casting was initially stubbed and is now used for rail collision
-
-## Seventh Code Slice
-
-Border collision has a first arcade pass:
-
-* visible rails now carry `RailCollider` gameplay components
-* `TrackPhysicsQueries::cast_car_shape` checks the car shape against rail AABBs
-* driving pushes the car out of rail overlaps and reflects the inward velocity component
-* collision response is deliberately damped so border hits cost speed without trapping the car
-
-## Sixth Code Slice
-
-Milestone 5 has a first local-only pass:
-
-* `src/hotseat.rs` tracks session players, active player, and an in-memory leaderboard
-* finished runs are recorded once and sorted by finish time
-* `N` advances to the next player after a finished run
-* `P` adds another local player while the run is waiting
-* debug overlay shows active player, player count, and session best
-
-No player profiles, save files, or persistent leaderboard storage are included.
-
-## Eighth Code Slice
-
-Milestone 6 has a first session-only pass:
-
-* `src/ghost.rs` records sampled transforms during running attempts
-* completed runs can become the session best ghost
-* a translucent ghost car replays the best run at matching elapsed time
-* debug overlay shows whether a ghost best exists
-
-Ghost data is in-memory only and is discarded when the app exits.
-
-## Ninth Code Slice
-
-Car visuals now use the local asset pack:
-
-* `assets/cars/SportsCar.obj` and its license come from `~/Downloads/Realistic Car Pack - Nov 2018.zip`
-* `src/car_asset.rs` contains a small OBJ-to-Bevy-mesh parser for this asset
-* player and ghost use the same sports-car mesh with different materials/colors
-* rail collision half-extents were updated to match the longer realistic car footprint
-
-## Tenth Code Slice
-
-Off-track scenery now uses the local forest asset pack:
-
-* forest textures and readme come from `~/Downloads/LowpolyForestPack.zip`
-* FBX models are not loaded directly because this Bevy setup has no FBX runtime loader
-* `src/track.rs` now spawns a grass field around the road
-* low-poly oak/spruce/rock scenery is generated with Bevy primitives using the pack textures
-* scenery is decorative only for now; it does not add driving collision or recovery rules
-
-## Eleventh Code Slice
-
-Reverse driving and steering were separated into explicit game-layer concepts:
-
-* driving input, motion basis, drive mode, steering, drive force, drag/grip, speed caps, and collision response are now separate steps
-* holding reverse while still moving forward is treated as braking
-* reverse steering only flips once signed forward speed is actually negative past a small threshold
-* debug overlay now shows signed speed and drive mode so control-state mistakes are visible during tuning
+* `TrackRecipe` owns seed and piece count.
+* Startup track pieces are generated deterministically from recipe + seed.
+* Surfaces are assigned by deterministic RNG.
+* Piece yaw is generated with small deterministic deltas to create gentle curve sequences.
+* Surface zones, rail colliders, and checkpoint/finish triggers now use oriented bounds.
+* The generated track keeps one checkpoint and one finish for the current run-loop contract.
+* Debug overlay shows generated seed and piece count.
 
 ## Milestones
 

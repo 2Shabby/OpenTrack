@@ -3,13 +3,29 @@ use bevy::prelude::*;
 use crate::physics::{EcsTrackPhysicsQueries, RailCollider, TrackPhysicsQueries};
 use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
 
-pub const CAR_START: Vec3 = Vec3::new(0.0, 0.05, -26.0);
+const DEFAULT_CAR_START: Vec3 = Vec3::new(0.0, 0.05, -26.0);
+
+#[derive(Clone, Copy, Resource)]
+pub struct CarSpawn {
+    pub translation: Vec3,
+    pub yaw: f32,
+}
+
+impl Default for CarSpawn {
+    fn default() -> Self {
+        Self {
+            translation: DEFAULT_CAR_START,
+            yaw: 0.0,
+        }
+    }
+}
 
 pub struct DrivingPlugin;
 
 impl Plugin for DrivingPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(DrivingTuning::default())
+            .insert_resource(CarSpawn::default())
             .add_systems(FixedUpdate, drive_car)
             .add_systems(Update, chase_camera.after(drive_car));
     }
@@ -96,6 +112,7 @@ pub struct ChaseCamera;
 fn drive_car(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
+    car_spawn: Res<CarSpawn>,
     tuning: Res<DrivingTuning>,
     surfaces: Res<SurfaceLibrary>,
     zones: Query<&SurfaceZone>,
@@ -108,8 +125,9 @@ fn drive_car(
     for (mut transform, mut car) in &mut cars {
         if keys.just_pressed(KeyCode::KeyR) {
             *car = PlayerCar::default();
-            transform.translation = CAR_START;
-            transform.rotation = Quat::IDENTITY;
+            transform.translation = car_spawn.translation;
+            transform.rotation = Quat::from_rotation_y(car_spawn.yaw);
+            car.yaw = car_spawn.yaw;
         }
 
         let controls = read_controls(&keys);
@@ -151,7 +169,7 @@ fn drive_car(
             }
         }
 
-        next_translation.y = CAR_START.y;
+        next_translation.y = car_spawn.translation.y;
         transform.translation = next_translation;
         transform.rotation = Quat::from_rotation_y(car.yaw);
     }

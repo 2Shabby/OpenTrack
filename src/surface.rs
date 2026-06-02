@@ -105,4 +105,5 @@ pub struct SurfaceZone {
     pub kind: SurfaceKind,
     pub center: Vec2,
     pub half_extents: Vec2,
+    pub yaw: f32,
 }

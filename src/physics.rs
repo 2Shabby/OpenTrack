@@ -42,18 +42,21 @@ struct SurfaceZoneSample {
     kind: SurfaceKind,
     center: Vec2,
     half_extents: Vec2,
+    yaw: f32,
 }
 
 #[derive(Component)]
 pub struct RailCollider {
     pub center: Vec2,
     pub half_extents: Vec2,
+    pub yaw: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
 struct RailColliderSample {
     center: Vec2,
     half_extents: Vec2,
+    yaw: f32,
 }
 
 pub struct EcsTrackPhysicsQueries {
@@ -70,6 +73,7 @@ impl EcsTrackPhysicsQueries {
                     kind: zone.kind,
                     center: zone.center,
                     half_extents: zone.half_extents,
+                    yaw: zone.yaw,
                 })
                 .collect(),
             rails: rails
@@ -77,6 +81,7 @@ impl EcsTrackPhysicsQueries {
                 .map(|rail| RailColliderSample {
                     center: rail.center,
                     half_extents: rail.half_extents,
+                    yaw: rail.yaw,
                 })
                 .collect(),
         }
@@ -108,8 +113,9 @@ impl TrackPhysicsQueries for EcsTrackPhysicsQueries {
 
 impl SurfaceZoneSample {
     fn contains(self, position: Vec3) -> bool {
-        let dx = (position.x - self.center.x).abs();
-        let dz = (position.z - self.center.y).abs();
+        let local = rotate_2d(Vec2::new(position.x, position.z) - self.center, -self.yaw);
+        let dx = local.x.abs();
+        let dz = local.y.abs();
 
         dx <= self.half_extents.x && dz <= self.half_extents.y
     }
@@ -117,8 +123,7 @@ impl SurfaceZoneSample {
 
 impl RailColliderSample {
     fn collide_car(self, position: Vec3) -> Option<CarHit> {
-        let center = Vec2::new(position.x, position.z);
-        let delta = center - self.center;
+        let delta = rotate_2d(Vec2::new(position.x, position.z) - self.center, -self.yaw);
         let expanded = self.half_extents + CAR_COLLISION_HALF_EXTENTS;
 
         if delta.x.abs() > expanded.x || delta.y.abs() > expanded.y {
@@ -128,11 +133,12 @@ impl RailColliderSample {
         let penetration_x = expanded.x - delta.x.abs();
         let penetration_z = expanded.y - delta.y.abs();
 
-        let normal = if penetration_x <= penetration_z {
+        let local_normal = if penetration_x <= penetration_z {
             Vec3::new(delta.x.signum_or_one(), 0.0, 0.0)
         } else {
             Vec3::new(0.0, 0.0, delta.y.signum_or_one())
         };
+        let normal = rotate_3d_y(local_normal, self.yaw);
 
         Some(CarHit {
             point: position,
@@ -140,6 +146,16 @@ impl RailColliderSample {
             penetration: penetration_x.min(penetration_z),
         })
     }
+}
+
+fn rotate_2d(value: Vec2, angle: f32) -> Vec2 {
+    let (sin, cos) = angle.sin_cos();
+    Vec2::new(value.x * cos - value.y * sin, value.x * sin + value.y * cos)
+}
+
+fn rotate_3d_y(value: Vec3, angle: f32) -> Vec3 {
+    let rotated = rotate_2d(Vec2::new(value.x, value.z), angle);
+    Vec3::new(rotated.x, value.y, rotated.y)
 }
 
 trait SignumOrOne {
