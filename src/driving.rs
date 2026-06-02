@@ -11,6 +11,9 @@ use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
 const DEFAULT_CAR_START: Vec3 = Vec3::new(0.0, 0.05, -26.0);
 const WHEEL_SAMPLE_HALF_WIDTH: f32 = 0.82;
 const WHEEL_SAMPLE_HALF_LENGTH: f32 = 1.72;
+const BODY_ROLL_RATE: f32 = 0.18;
+const BODY_PITCH_RATE: f32 = 0.05;
+const BODY_VISUAL_HEIGHT: f32 = 0.0;
 
 #[derive(Clone, Copy, Resource)]
 pub struct CarSpawn {
@@ -46,7 +49,8 @@ impl Plugin for DrivingPlugin {
             )
             .add_systems(
                 Update,
-                chase_camera
+                (update_car_visuals, chase_camera)
+                    .chain()
                     .after(drive_car)
                     .run_if(in_state(GameState::Driving).and(not_paused)),
             );
@@ -108,6 +112,15 @@ impl PlayerCar {
 
 #[derive(Component)]
 pub struct ChaseCamera;
+
+#[derive(Component)]
+pub struct CarBodyVisual;
+
+#[derive(Component)]
+pub struct WheelVisual {
+    pub local_offset: Vec3,
+    pub front: bool,
+}
 
 #[derive(Clone, Copy)]
 pub struct WheelContacts {
@@ -228,6 +241,40 @@ fn sample_wheel_contacts(
         front_right: physics.surface_at(center + front + right),
         rear_left: physics.surface_at(center + rear + left),
         rear_right: physics.surface_at(center + rear + right),
+    }
+}
+
+fn update_car_visuals(
+    time: Res<Time>,
+    car: Single<(&Transform, &PlayerCar)>,
+    mut body: Single<&mut Transform, (With<CarBodyVisual>, Without<PlayerCar>)>,
+    mut wheels: Query<(&mut Transform, &WheelVisual), Without<PlayerCar>>,
+) {
+    let (car_transform, car_state) = *car;
+    let forward = Vec3::new(car_state.yaw.sin(), 0.0, car_state.yaw.cos());
+    let right = Vec3::new(forward.z, 0.0, -forward.x);
+    let roll = car_state.steer * car_state.velocity.length() * BODY_ROLL_RATE * -0.01;
+    let pitch = car_state.throttle * BODY_PITCH_RATE;
+
+    body.translation = car_transform.translation + Vec3::Y * BODY_VISUAL_HEIGHT;
+    body.rotation = Quat::from_rotation_y(car_state.yaw)
+        * Quat::from_rotation_z(roll)
+        * Quat::from_rotation_x(pitch);
+
+    let spin = time.elapsed_secs_wrapped() * car_state.signed_speed * 2.0;
+    for (mut transform, wheel) in &mut wheels {
+        let world_offset = right * wheel.local_offset.x
+            + Vec3::Y * wheel.local_offset.y
+            + forward * wheel.local_offset.z;
+        let steer_angle = if wheel.front {
+            car_state.steer * 0.42
+        } else {
+            0.0
+        };
+
+        transform.translation = car_transform.translation + world_offset;
+        transform.rotation =
+            Quat::from_rotation_y(car_state.yaw + steer_angle) * Quat::from_rotation_x(spin);
     }
 }
 

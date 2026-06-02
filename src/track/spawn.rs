@@ -11,7 +11,7 @@ use super::markers::{
 use super::road_mesh::road_surface_mesh;
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::sports_car_mesh;
-use crate::driving::{CarPaint, CarSpawn, ChaseCamera, PlayerCar};
+use crate::driving::{CarBodyVisual, CarPaint, CarSpawn, ChaseCamera, PlayerCar, WheelVisual};
 use crate::physics::RailCollider;
 use crate::run::{TrackTrigger, TrackTriggerKind};
 use crate::spatial::{OrientedRect, Pose2, forward_3d};
@@ -155,20 +155,53 @@ fn spawn_car(
     car_spawn: CarSpawn,
     car_paint: CarPaint,
 ) {
+    let body_material = materials.add(StandardMaterial {
+        base_color: car_paint.color,
+        metallic: 0.15,
+        perceptual_roughness: 0.45,
+        ..default()
+    });
+    let wheel_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.02, 0.02, 0.018),
+        perceptual_roughness: 0.78,
+        ..default()
+    });
+
     commands.spawn((
-        Mesh3d(meshes.add(sports_car_mesh())),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: car_paint.color,
-            metallic: 0.15,
-            perceptual_roughness: 0.45,
-            ..default()
-        })),
         Transform::from_translation(car_spawn.translation)
             .with_rotation(Quat::from_rotation_y(car_spawn.yaw)),
         PlayerCar::default(),
         SpawnedPlayer,
         SpawnedSceneEntity,
     ));
+
+    commands.spawn((
+        Mesh3d(meshes.add(sports_car_mesh())),
+        MeshMaterial3d(body_material),
+        Transform::from_translation(car_spawn.translation)
+            .with_rotation(Quat::from_rotation_y(car_spawn.yaw)),
+        CarBodyVisual,
+        SpawnedSceneEntity,
+    ));
+
+    let wheel_mesh = meshes.add(Cuboid::new(0.34, 0.46, 0.6));
+    for (local_offset, front) in [
+        (Vec3::new(-0.78, 0.22, 1.25), true),
+        (Vec3::new(0.78, 0.22, 1.25), true),
+        (Vec3::new(-0.78, 0.22, -1.35), false),
+        (Vec3::new(0.78, 0.22, -1.35), false),
+    ] {
+        commands.spawn((
+            Mesh3d(wheel_mesh.clone()),
+            MeshMaterial3d(wheel_material.clone()),
+            Transform::from_translation(car_spawn.translation),
+            WheelVisual {
+                local_offset,
+                front,
+            },
+            SpawnedSceneEntity,
+        ));
+    }
 }
 
 fn spawn_lighting(commands: &mut Commands) {

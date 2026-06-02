@@ -550,6 +550,7 @@ Procedural assembly has started:
 * Finished runs move to a results screen with retry, next-player, main-menu, quit, and in-memory leaderboard display.
 * Driving model samples four wheel surface contacts and reports them in debug for split-surface drift tuning.
 * First-pass drift assist uses slip state to reduce lateral damping and add controlled yaw assist while sliding.
+* Car visuals now use separate body and wheel primitives with body roll/pitch, front-wheel steering, and wheel spin.
 
 ## Pending Work
 
@@ -585,8 +586,8 @@ Pending:
 * tune the current drift assist across surface and speed cases
 * drift case matrix: brake-entered drift, throttle-held drift, counter-steer recovery, split-surface slide, ice slide, boost slide, reverse/no-drift
 * counter-steer and spin-out damping assist tuned for Trackmania-like readability
-* visual wheel transform primitives: steer angle, wheel spin, and grounded/contact hints
-* visual body roll/pitch primitives for turning, braking, acceleration, boost, and wall impacts
+* add grounded/contact visual hints to the current wheel primitives
+* tune body roll/pitch response for boost and wall impacts
 * better collision response at high speed
 * visual feedback for surface transitions and boost
 * optional controller support once keyboard feel stabilizes
