@@ -551,6 +551,15 @@ Off-track scenery now uses the local forest asset pack:
 * low-poly oak/spruce/rock scenery is generated with Bevy primitives using the pack textures
 * scenery is decorative only for now; it does not add driving collision or recovery rules
 
+## Eleventh Code Slice
+
+Reverse driving and steering were separated into explicit game-layer concepts:
+
+* driving input, motion basis, drive mode, steering, drive force, drag/grip, speed caps, and collision response are now separate steps
+* holding reverse while still moving forward is treated as braking
+* reverse steering only flips once signed forward speed is actually negative past a small threshold
+* debug overlay now shows signed speed and drive mode so control-state mistakes are visible during tuning
+
 ## Milestones
 
 ### 1. Driving Sandbox

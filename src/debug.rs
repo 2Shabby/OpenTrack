@@ -55,7 +55,7 @@ fn update_debug_overlay(
         .unwrap_or_else(|| "none".to_string());
 
     overlay.0 = format!(
-        "player: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
+        "player: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
         hotseat.active_player_name(),
         hotseat.players.len(),
         best,
@@ -65,6 +65,8 @@ fn update_debug_overlay(
         run.next_checkpoint,
         run.checkpoint_count,
         car.velocity.length(),
+        car.signed_speed,
+        car.drive_mode.label(),
         car.current_surface.label(),
         car.throttle,
         car.steer,
