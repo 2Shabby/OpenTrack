@@ -541,6 +541,16 @@ Car visuals now use the local asset pack:
 * player and ghost use the same sports-car mesh with different materials/colors
 * rail collision half-extents were updated to match the longer realistic car footprint
 
+## Tenth Code Slice
+
+Off-track scenery now uses the local forest asset pack:
+
+* forest textures and readme come from `~/Downloads/LowpolyForestPack.zip`
+* FBX models are not loaded directly because this Bevy setup has no FBX runtime loader
+* `src/track.rs` now spawns a grass field around the road
+* low-poly oak/spruce/rock scenery is generated with Bevy primitives using the pack textures
+* scenery is decorative only for now; it does not add driving collision or recovery rules
+
 ## Milestones
 
 ### 1. Driving Sandbox
