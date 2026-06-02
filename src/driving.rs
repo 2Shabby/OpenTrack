@@ -120,6 +120,15 @@ pub struct CarBodyVisual;
 pub struct WheelVisual {
     pub local_offset: Vec3,
     pub front: bool,
+    pub corner: WheelCorner,
+}
+
+#[derive(Clone, Copy)]
+pub enum WheelCorner {
+    FrontLeft,
+    FrontRight,
+    RearLeft,
+    RearRight,
 }
 
 #[derive(Clone, Copy)]
@@ -171,6 +180,15 @@ impl WheelContacts {
         self.front_left != self.front_right
             || self.front_left != self.rear_left
             || self.front_left != self.rear_right
+    }
+
+    pub fn at(self, corner: WheelCorner) -> SurfaceKind {
+        match corner {
+            WheelCorner::FrontLeft => self.front_left,
+            WheelCorner::FrontRight => self.front_right,
+            WheelCorner::RearLeft => self.rear_left,
+            WheelCorner::RearRight => self.rear_right,
+        }
     }
 }
 
@@ -270,7 +288,15 @@ fn update_car_visuals(
     time: Res<Time>,
     car: Single<(&Transform, &PlayerCar)>,
     mut body: Single<&mut Transform, (With<CarBodyVisual>, Without<PlayerCar>)>,
-    mut wheels: Query<(&mut Transform, &WheelVisual), Without<PlayerCar>>,
+    mut wheels: Query<
+        (
+            &mut Transform,
+            &WheelVisual,
+            &MeshMaterial3d<StandardMaterial>,
+        ),
+        Without<PlayerCar>,
+    >,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let (car_transform, car_state) = *car;
     let forward = Vec3::new(car_state.yaw.sin(), 0.0, car_state.yaw.cos());
@@ -284,7 +310,7 @@ fn update_car_visuals(
         * Quat::from_rotation_x(pitch);
 
     let spin = time.elapsed_secs_wrapped() * car_state.signed_speed * 2.0;
-    for (mut transform, wheel) in &mut wheels {
+    for (mut transform, wheel, material) in &mut wheels {
         let world_offset = right * wheel.local_offset.x
             + Vec3::Y * wheel.local_offset.y
             + forward * wheel.local_offset.z;
@@ -297,6 +323,20 @@ fn update_car_visuals(
         transform.translation = car_transform.translation + world_offset;
         transform.rotation =
             Quat::from_rotation_y(car_state.yaw + steer_angle) * Quat::from_rotation_x(spin);
+
+        if let Some(material) = materials.get_mut(material) {
+            material.base_color = wheel_color(car_state.wheel_contacts.at(wheel.corner));
+        }
+    }
+}
+
+fn wheel_color(surface: SurfaceKind) -> Color {
+    match surface {
+        SurfaceKind::Grass => Color::srgb(0.13, 0.35, 0.09),
+        SurfaceKind::Ice => Color::srgb(0.45, 0.75, 0.82),
+        SurfaceKind::Boost => Color::srgb(0.85, 0.54, 0.05),
+        SurfaceKind::Dirt => Color::srgb(0.34, 0.2, 0.1),
+        SurfaceKind::Asphalt => Color::srgb(0.02, 0.02, 0.018),
     }
 }
 

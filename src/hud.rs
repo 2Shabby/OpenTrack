@@ -61,12 +61,14 @@ fn update_hud(
         .unwrap_or_else(|| "none".to_string());
 
     hud.0 = format!(
-        "{}\nTime {:>6.2}\nCheckpoint {}/{}\nSpeed {:>5.1}\nBest {}\nGhost {}",
+        "{}\nTime {:>6.2}\nCheckpoint {}/{}\nSpeed {:>5.1}\n{}\nSurface {}\nBest {}\nGhost {}",
         hotseat.active_player_name(),
         run.elapsed,
         run.next_checkpoint,
         run.checkpoint_count,
         car.velocity.length(),
+        car.handling_state.label(),
+        car.current_surface.label(),
         best,
         ghost
     );

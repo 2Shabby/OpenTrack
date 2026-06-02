@@ -12,7 +12,9 @@ use super::markers::{
 use super::road_mesh::road_surface_mesh;
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::sports_car_mesh;
-use crate::driving::{CarBodyVisual, CarPaint, CarSpawn, ChaseCamera, PlayerCar, WheelVisual};
+use crate::driving::{
+    CarBodyVisual, CarPaint, CarSpawn, ChaseCamera, PlayerCar, WheelCorner, WheelVisual,
+};
 use crate::physics::RailCollider;
 use crate::run::{TrackTrigger, TrackTriggerKind};
 use crate::spatial::{OrientedRect, Pose2, forward_3d};
@@ -178,12 +180,6 @@ fn spawn_car(
         perceptual_roughness: 0.45,
         ..default()
     });
-    let wheel_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.02, 0.02, 0.018),
-        perceptual_roughness: 0.78,
-        ..default()
-    });
-
     commands.spawn((
         Transform::from_translation(car_spawn.translation)
             .with_rotation(Quat::from_rotation_y(car_spawn.yaw)),
@@ -202,19 +198,26 @@ fn spawn_car(
     ));
 
     let wheel_mesh = meshes.add(Cuboid::new(0.34, 0.46, 0.6));
-    for (local_offset, front) in [
-        (Vec3::new(-0.78, 0.22, 1.25), true),
-        (Vec3::new(0.78, 0.22, 1.25), true),
-        (Vec3::new(-0.78, 0.22, -1.35), false),
-        (Vec3::new(0.78, 0.22, -1.35), false),
+    for (local_offset, front, corner) in [
+        (Vec3::new(-0.78, 0.22, 1.25), true, WheelCorner::FrontLeft),
+        (Vec3::new(0.78, 0.22, 1.25), true, WheelCorner::FrontRight),
+        (Vec3::new(-0.78, 0.22, -1.35), false, WheelCorner::RearLeft),
+        (Vec3::new(0.78, 0.22, -1.35), false, WheelCorner::RearRight),
     ] {
+        let wheel_material = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.02, 0.02, 0.018),
+            perceptual_roughness: 0.78,
+            ..default()
+        });
+
         commands.spawn((
             Mesh3d(wheel_mesh.clone()),
-            MeshMaterial3d(wheel_material.clone()),
+            MeshMaterial3d(wheel_material),
             Transform::from_translation(car_spawn.translation),
             WheelVisual {
                 local_offset,
                 front,
+                corner,
             },
             SpawnedSceneEntity,
         ));

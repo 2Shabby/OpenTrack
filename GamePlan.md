@@ -559,6 +559,7 @@ Procedural assembly has started:
 * Track validation now checks empty tracks, missing finish, short pieces, zero-length segments, connections, and generated counts.
 * Four-wheel contact samples now affect lateral grip, so split-surface cases change handling.
 * Off-track fallback surface is now grass instead of asphalt, with slower acceleration and higher drag.
+* Wheel visuals tint by contact surface, and HUD shows handling/surface state.
 
 ## Pending Work
 
@@ -591,17 +592,17 @@ Pending:
 * tune the current drift assist across surface and speed cases
 * drift case matrix: brake-entered drift, throttle-held drift, counter-steer recovery, split-surface slide, ice slide, boost slide, reverse/no-drift
 * counter-steer and spin-out damping assist tuned for Trackmania-like readability
-* add grounded/contact visual hints to the current wheel primitives
+* add airborne/grounded distinction to wheel contact hints
 * tune body roll/pitch response for boost and wall impacts
 * better collision response at high speed
-* visual feedback for surface transitions and boost
+* add stronger boost and impact visual feedback
 * optional controller support once keyboard feel stabilizes
 
 ### UI/HUD
 
 Pending:
 
-* improve HUD visual design and layout polish
+* improve HUD layout styling beyond text-only display
 
 ### Assets and Presentation
 
