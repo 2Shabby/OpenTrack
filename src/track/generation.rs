@@ -3,7 +3,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::driving::CarSpawn;
-use crate::spatial::Pose2;
+use crate::spatial::{Pose2, rotate_2d};
 use crate::surface::SurfaceKind;
 
 pub const TRACK_WIDTH: f32 = 12.0;
@@ -42,8 +42,8 @@ impl GeneratedTrackInfo {
             seed: recipe.seed,
             piece_count: pieces.len(),
             checkpoint_count: TrackPiece::checkpoint_count(pieces),
-            road_surface_count: pieces.len(),
-            rail_count: pieces.len() * 2,
+            road_surface_count: pieces.iter().map(TrackPiece::segment_count).sum(),
+            rail_count: pieces.iter().map(TrackPiece::segment_count).sum::<usize>() * 2,
             trigger_count: TrackPiece::trigger_count(pieces),
         }
     }
@@ -56,12 +56,11 @@ pub enum TrackPieceKind {
     Finish,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct TrackPiece {
     pub kind: TrackPieceKind,
     pub surface: SurfaceKind,
-    pub entry: Pose2,
-    pub exit: Pose2,
+    pub frames: Vec<PathFrame>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -69,28 +68,46 @@ pub struct PathFrame {
     pub pose: Pose2,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TrackSegment {
+    pub pose: Pose2,
+    pub length: f32,
+}
+
 impl TrackPiece {
-    pub fn frames(self) -> [PathFrame; 2] {
-        [
-            PathFrame { pose: self.entry },
-            PathFrame { pose: self.exit },
-        ]
+    pub fn entry(&self) -> Pose2 {
+        self.frames
+            .first()
+            .map(|frame| frame.pose)
+            .unwrap_or_else(|| Pose2::new(Vec2::ZERO, 0.0))
     }
 
-    pub fn pose(self) -> Pose2 {
-        Pose2::new(
-            (self.entry.position + self.exit.position) * 0.5,
-            self.entry.yaw,
-        )
+    pub fn exit(&self) -> Pose2 {
+        self.frames
+            .last()
+            .map(|frame| frame.pose)
+            .unwrap_or_else(|| self.entry())
     }
 
-    pub fn length(self) -> f32 {
-        let [entry, exit] = self.frames();
-        entry.pose.position.distance(exit.pose.position)
+    pub fn segments(&self) -> Vec<TrackSegment> {
+        self.frames
+            .windows(2)
+            .map(|pair| {
+                let entry = pair[0].pose;
+                let exit = pair[1].pose;
+                TrackSegment {
+                    pose: Pose2::new(
+                        (entry.position + exit.position) * 0.5,
+                        mid_yaw(entry.yaw, exit.yaw),
+                    ),
+                    length: entry.position.distance(exit.position),
+                }
+            })
+            .collect()
     }
 
-    pub fn bounds(self) -> Vec2 {
-        Vec2::new(TRACK_WIDTH * 0.5, self.length() * 0.5)
+    pub fn segment_count(&self) -> usize {
+        self.frames.len().saturating_sub(1)
     }
 
     pub fn checkpoint_count(pieces: &[Self]) -> usize {
@@ -124,21 +141,17 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
 
     (0..piece_count)
         .map(|index| {
-            let piece_yaw = entry.yaw;
-            let exit = Pose2::new(
-                entry.position + Pose2::new(Vec2::ZERO, piece_yaw).forward() * PIECE_LENGTH,
-                entry.yaw,
-            );
             let kind = piece_kind(index, piece_count, checkpoint_index);
             let surface = match kind {
                 TrackPieceKind::Finish => SurfaceKind::Boost,
                 _ => generated_surface(&mut rng),
             };
+            let frames = generated_frames(entry, kind, &mut rng);
+            let exit = frames.last().map(|frame| frame.pose).unwrap_or(entry);
             let piece = TrackPiece {
                 kind,
                 surface,
-                entry,
-                exit,
+                frames,
             };
 
             entry = exit;
@@ -149,10 +162,10 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
 
 pub fn validate_piece_connections(pieces: &[TrackPiece]) -> Result<(), String> {
     for (index, pair) in pieces.windows(2).enumerate() {
-        let previous = pair[0];
-        let next = pair[1];
-        let gap = previous.exit.position.distance(next.entry.position);
-        let yaw_delta = (previous.exit.yaw - next.entry.yaw).abs();
+        let previous = &pair[0];
+        let next = &pair[1];
+        let gap = previous.exit().position.distance(next.entry().position);
+        let yaw_delta = (previous.exit().yaw - next.entry().yaw).abs();
 
         if gap > 0.001 || yaw_delta > 0.001 {
             return Err(format!(
@@ -172,11 +185,12 @@ pub fn car_spawn_for(pieces: &[TrackPiece]) -> CarSpawn {
     let Some(first_piece) = pieces.first() else {
         return CarSpawn::default();
     };
-    let start = first_piece.entry.position + forward_2d(first_piece.entry.yaw) * 1.1;
+    let entry = first_piece.entry();
+    let start = entry.position + forward_2d(entry.yaw) * 1.1;
 
     CarSpawn {
         translation: Vec3::new(start.x, 0.05, start.y),
-        yaw: first_piece.entry.yaw,
+        yaw: entry.yaw,
     }
 }
 
@@ -201,4 +215,46 @@ fn generated_surface(rng: &mut ChaCha8Rng) -> SurfaceKind {
         8 => SurfaceKind::Ice,
         _ => SurfaceKind::Boost,
     }
+}
+
+fn generated_frames(entry: Pose2, kind: TrackPieceKind, rng: &mut ChaCha8Rng) -> Vec<PathFrame> {
+    if matches!(kind, TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish)
+        || rng.random_range(0..10) < 6
+    {
+        return straight_frames(entry);
+    }
+
+    let side = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
+    curve_frames(entry, side)
+}
+
+fn straight_frames(entry: Pose2) -> Vec<PathFrame> {
+    let exit = Pose2::new(entry.position + entry.forward() * PIECE_LENGTH, entry.yaw);
+    vec![PathFrame { pose: entry }, PathFrame { pose: exit }]
+}
+
+fn curve_frames(entry: Pose2, side: f32) -> Vec<PathFrame> {
+    const CURVE_RADIUS: f32 = 24.0;
+    const CURVE_ANGLE: f32 = std::f32::consts::FRAC_PI_4;
+    const CURVE_STEPS: usize = 6;
+
+    let center = entry.position + entry.right() * side * CURVE_RADIUS;
+    let radius_vector = -entry.right() * side * CURVE_RADIUS;
+
+    (0..=CURVE_STEPS)
+        .map(|step| {
+            let t = step as f32 / CURVE_STEPS as f32;
+            let angle = side * CURVE_ANGLE * t;
+            PathFrame {
+                pose: Pose2::new(
+                    center + rotate_2d(radius_vector, angle),
+                    entry.yaw + side * CURVE_ANGLE * t,
+                ),
+            }
+        })
+        .collect()
+}
+
+fn mid_yaw(entry_yaw: f32, exit_yaw: f32) -> f32 {
+    entry_yaw + (exit_yaw - entry_yaw) * 0.5
 }

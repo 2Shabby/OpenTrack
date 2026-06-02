@@ -533,6 +533,8 @@ Procedural assembly has started:
 * Track generation now stores explicit entry/exit transforms per piece to keep adjacent pieces and lines aligned.
 * Straight pieces now derive center pose, length, road bounds, rails, and surface zones from entry/exit centerline frames.
 * Road surface visuals are generated as meshes from path frames instead of spawned as rotated plane primitives.
+* Generated tracks now include deterministic sampled arc curves.
+* Road surface zones and rails are generated per sampled path segment, not per whole piece rectangle.
 * Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
 * Generated scene entities are tagged by semantic role: environment, scenery, road surface, rail, trigger, player, camera, and lighting.
 * Shared spatial types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
@@ -566,12 +568,9 @@ This is the next sensible phase before adding more track complexity, because run
 
 Pending:
 
-* generated piece sequences beyond a fixed straight chain
 * a real piece-library contract for visuals, road surface zones, rails, triggers, and colliders
-* curve pieces with geometry and collision generated from the same data
-* extend current centerline frames from straight endpoints to sampled curved paths
-* road mesh generation from sampled path frames
-* rail segment generation from road edge samples
+* expand generated piece sequences beyond simple straight/arc choices
+* improve curve piece variety and validation
 * better off-track behavior once border collision is stable
 * checkpoint and finish line placement for every future piece type
 * recipe controls for seed, length, surface mix, and difficulty

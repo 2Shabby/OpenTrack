@@ -35,7 +35,7 @@ pub fn spawn_generated_track(
     let track_info = GeneratedTrackInfo::from_pieces(recipe, &pieces);
     let car_spawn = car_spawn_for(&pieces);
 
-    for piece in pieces.iter().copied() {
+    for piece in pieces.iter() {
         spawn_piece(&mut commands, &mut meshes, &mut materials, piece);
     }
 
@@ -57,32 +57,43 @@ fn spawn_piece(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
-    piece: TrackPiece,
+    piece: &TrackPiece,
 ) {
-    let piece_pose = piece.pose();
-
     commands.spawn((
-        Mesh3d(meshes.add(road_surface_mesh(&piece.frames(), TRACK_WIDTH))),
+        Mesh3d(meshes.add(road_surface_mesh(&piece.frames, TRACK_WIDTH))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: surface_color(piece.surface),
             perceptual_roughness: 0.92,
             ..default()
         })),
         Transform::default(),
-        SurfaceZone::new(piece.surface, piece_pose, piece.bounds()),
-        GeneratedRoadSurface,
         SpawnedSceneEntity,
     ));
 
+    spawn_surface_zones(commands, piece);
     spawn_rails(commands, meshes, materials, piece);
     spawn_trigger(commands, meshes, materials, piece);
+}
+
+fn spawn_surface_zones(commands: &mut Commands, piece: &TrackPiece) {
+    for segment in piece.segments() {
+        commands.spawn((
+            SurfaceZone::new(
+                piece.surface,
+                segment.pose,
+                Vec2::new(TRACK_WIDTH * 0.5, segment.length * 0.5),
+            ),
+            GeneratedRoadSurface,
+            SpawnedSceneEntity,
+        ));
+    }
 }
 
 fn spawn_rails(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
-    piece: TrackPiece,
+    piece: &TrackPiece,
 ) {
     let rail_material = materials.add(StandardMaterial {
         base_color: Color::srgb(0.11, 0.12, 0.12),
@@ -90,30 +101,30 @@ fn spawn_rails(
         ..default()
     });
 
-    let piece_pose = piece.pose();
+    for segment in piece.segments() {
+        for side in [-1.0, 1.0] {
+            let local = Vec2::new(side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5), 0.0);
+            let rail_pose = Pose2::new(segment.pose.local_to_world(local), segment.pose.yaw);
 
-    for side in [-1.0, 1.0] {
-        let local = Vec2::new(side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5), 0.0);
-        let rail_pose = Pose2::new(piece_pose.local_to_world(local), piece_pose.yaw);
-
-        commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, piece.length()))),
-            MeshMaterial3d(rail_material.clone()),
-            Transform::from_xyz(
-                rail_pose.position.x,
-                RAIL_HEIGHT * 0.5,
-                rail_pose.position.y,
-            )
-            .with_rotation(Quat::from_rotation_y(piece_pose.yaw)),
-            RailCollider {
-                bounds: OrientedRect::new(
-                    rail_pose,
-                    Vec2::new(RAIL_THICKNESS * 0.5, piece.length() * 0.5),
-                ),
-            },
-            GeneratedRail,
-            SpawnedSceneEntity,
-        ));
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, segment.length))),
+                MeshMaterial3d(rail_material.clone()),
+                Transform::from_xyz(
+                    rail_pose.position.x,
+                    RAIL_HEIGHT * 0.5,
+                    rail_pose.position.y,
+                )
+                .with_rotation(Quat::from_rotation_y(segment.pose.yaw)),
+                RailCollider {
+                    bounds: OrientedRect::new(
+                        rail_pose,
+                        Vec2::new(RAIL_THICKNESS * 0.5, segment.length * 0.5),
+                    ),
+                },
+                GeneratedRail,
+                SpawnedSceneEntity,
+            ));
+        }
     }
 }
 
@@ -121,7 +132,7 @@ fn spawn_trigger(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
-    piece: TrackPiece,
+    piece: &TrackPiece,
 ) {
     let Some((kind, color, line)) = trigger_for_piece(piece) else {
         return;
@@ -230,18 +241,18 @@ fn spawn_camera(commands: &mut Commands, car_spawn: CarSpawn) {
     ));
 }
 
-fn trigger_for_piece(piece: TrackPiece) -> Option<(TrackTriggerKind, Color, Pose2)> {
+fn trigger_for_piece(piece: &TrackPiece) -> Option<(TrackTriggerKind, Color, Pose2)> {
     match piece.kind {
         TrackPieceKind::Straight => None,
         TrackPieceKind::Checkpoint(index) => Some((
             TrackTriggerKind::Checkpoint(index),
             Color::srgb(0.15, 0.48, 1.0),
-            piece.entry,
+            piece.entry(),
         )),
         TrackPieceKind::Finish => Some((
             TrackTriggerKind::Finish,
             Color::srgb(1.0, 1.0, 1.0),
-            piece.exit,
+            piece.exit(),
         )),
     }
 }
