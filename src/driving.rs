@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::physics::{EcsTrackPhysicsQueries, TrackPhysicsQueries};
+use crate::physics::{EcsTrackPhysicsQueries, RailCollider, TrackPhysicsQueries};
 use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
 
 pub const CAR_START: Vec3 = Vec3::new(0.0, 0.35, -26.0);
@@ -72,10 +72,11 @@ fn drive_car(
     tuning: Res<DrivingTuning>,
     surfaces: Res<SurfaceLibrary>,
     zones: Query<&SurfaceZone>,
+    rails: Query<&RailCollider>,
     mut cars: Query<(&mut Transform, &mut PlayerCar)>,
 ) {
     let dt = time.delta_secs();
-    let physics = EcsTrackPhysicsQueries::new(&zones);
+    let physics = EcsTrackPhysicsQueries::new(&zones, &rails);
 
     for (mut transform, mut car) in &mut cars {
         if keys.just_pressed(KeyCode::KeyR) {
@@ -126,8 +127,19 @@ fn drive_car(
         let capped_lateral_speed = car.velocity.dot(right);
         car.velocity = forward * capped_forward_speed + right * capped_lateral_speed;
 
-        transform.translation += car.velocity * dt;
-        transform.translation.y = CAR_START.y;
+        let mut next_translation = transform.translation + car.velocity * dt;
+        if let Some(hit) = physics.cast_car_shape(next_translation, car.velocity) {
+            next_translation += hit.normal * (hit.penetration + 0.01);
+
+            let inward_speed = car.velocity.dot(hit.normal);
+            if inward_speed < 0.0 {
+                car.velocity -= hit.normal * inward_speed * 1.35;
+                car.velocity *= 0.78;
+            }
+        }
+
+        next_translation.y = CAR_START.y;
+        transform.translation = next_translation;
         transform.rotation = Quat::from_rotation_y(car.yaw);
     }
 }

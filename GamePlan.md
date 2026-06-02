@@ -498,7 +498,16 @@ The physics-query boundary now exists:
 * `src/physics.rs` defines `TrackPhysicsQueries`, `GroundHit`, and `CarHit`
 * the initial implementation queries ECS `SurfaceZone` components
 * driving asks the physics layer for current surface instead of calling surface lookup directly
-* car shape casting is intentionally stubbed until wall/floor collision work starts
+* car shape casting was initially stubbed and is now used for rail collision
+
+## Seventh Code Slice
+
+Border collision has a first arcade pass:
+
+* visible rails now carry `RailCollider` gameplay components
+* `TrackPhysicsQueries::cast_car_shape` checks the car shape against rail AABBs
+* driving pushes the car out of rail overlaps and reflects the inward velocity component
+* collision response is deliberately damped so border hits cost speed without trapping the car
 
 ## Sixth Code Slice
 

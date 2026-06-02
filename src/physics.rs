@@ -2,6 +2,8 @@ use bevy::prelude::*;
 
 use crate::surface::{SurfaceKind, SurfaceZone};
 
+const CAR_COLLISION_HALF_EXTENTS: Vec2 = Vec2::new(0.78, 1.05);
+
 pub struct PhysicsQueriesPlugin;
 
 impl Plugin for PhysicsQueriesPlugin {
@@ -21,6 +23,7 @@ pub struct GroundHit {
 pub struct CarHit {
     pub point: Vec3,
     pub normal: Vec3,
+    pub penetration: f32,
 }
 
 #[allow(dead_code)]
@@ -41,12 +44,25 @@ struct SurfaceZoneSample {
     half_extents: Vec2,
 }
 
+#[derive(Component)]
+pub struct RailCollider {
+    pub center: Vec2,
+    pub half_extents: Vec2,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RailColliderSample {
+    center: Vec2,
+    half_extents: Vec2,
+}
+
 pub struct EcsTrackPhysicsQueries {
     surface_zones: Vec<SurfaceZoneSample>,
+    rails: Vec<RailColliderSample>,
 }
 
 impl EcsTrackPhysicsQueries {
-    pub fn new(surface_zones: &Query<&SurfaceZone>) -> Self {
+    pub fn new(surface_zones: &Query<&SurfaceZone>, rails: &Query<&RailCollider>) -> Self {
         Self {
             surface_zones: surface_zones
                 .iter()
@@ -54,6 +70,13 @@ impl EcsTrackPhysicsQueries {
                     kind: zone.kind,
                     center: zone.center,
                     half_extents: zone.half_extents,
+                })
+                .collect(),
+            rails: rails
+                .iter()
+                .map(|rail| RailColliderSample {
+                    center: rail.center,
+                    half_extents: rail.half_extents,
                 })
                 .collect(),
         }
@@ -75,8 +98,11 @@ impl TrackPhysicsQueries for EcsTrackPhysicsQueries {
         })
     }
 
-    fn cast_car_shape(&self, _position: Vec3, _velocity: Vec3) -> Option<CarHit> {
-        None
+    fn cast_car_shape(&self, position: Vec3, _velocity: Vec3) -> Option<CarHit> {
+        self.rails
+            .iter()
+            .filter_map(|rail| rail.collide_car(position))
+            .min_by(|a, b| a.penetration.total_cmp(&b.penetration))
     }
 }
 
@@ -86,5 +112,42 @@ impl SurfaceZoneSample {
         let dz = (position.z - self.center.y).abs();
 
         dx <= self.half_extents.x && dz <= self.half_extents.y
+    }
+}
+
+impl RailColliderSample {
+    fn collide_car(self, position: Vec3) -> Option<CarHit> {
+        let center = Vec2::new(position.x, position.z);
+        let delta = center - self.center;
+        let expanded = self.half_extents + CAR_COLLISION_HALF_EXTENTS;
+
+        if delta.x.abs() > expanded.x || delta.y.abs() > expanded.y {
+            return None;
+        }
+
+        let penetration_x = expanded.x - delta.x.abs();
+        let penetration_z = expanded.y - delta.y.abs();
+
+        let normal = if penetration_x <= penetration_z {
+            Vec3::new(delta.x.signum_or_one(), 0.0, 0.0)
+        } else {
+            Vec3::new(0.0, 0.0, delta.y.signum_or_one())
+        };
+
+        Some(CarHit {
+            point: position,
+            normal,
+            penetration: penetration_x.min(penetration_z),
+        })
+    }
+}
+
+trait SignumOrOne {
+    fn signum_or_one(self) -> f32;
+}
+
+impl SignumOrOne for f32 {
+    fn signum_or_one(self) -> f32 {
+        if self >= 0.0 { 1.0 } else { -1.0 }
     }
 }

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::driving::{CAR_START, ChaseCamera, PlayerCar};
+use crate::physics::RailCollider;
 use crate::run::{TrackTrigger, TrackTriggerKind};
 use crate::surface::{SurfaceKind, SurfaceZone};
 
@@ -118,14 +119,19 @@ fn spawn_rails(
     });
 
     for side in [-1.0, 1.0] {
+        let center = Vec2::new(
+            side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5),
+            piece.center.z,
+        );
+
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, PIECE_LENGTH))),
             MeshMaterial3d(rail_material.clone()),
-            Transform::from_xyz(
-                side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5),
-                RAIL_HEIGHT * 0.5,
-                piece.center.z,
-            ),
+            Transform::from_xyz(center.x, RAIL_HEIGHT * 0.5, center.y),
+            RailCollider {
+                center,
+                half_extents: Vec2::new(RAIL_THICKNESS * 0.5, PIECE_LENGTH * 0.5),
+            },
         ));
     }
 }
