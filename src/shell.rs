@@ -1,7 +1,7 @@
 use bevy::app::AppExit;
 use bevy::prelude::*;
 
-use crate::driving::CarPaint;
+use crate::driving::{CarPaint, CarSpawn, PlayerCar};
 use crate::game_state::{GameState, PauseState};
 use crate::hotseat::HotseatSession;
 use crate::run::{RunState, RunStatus};
@@ -125,6 +125,8 @@ struct PauseMenuEntity;
 #[derive(Clone, Copy, Component)]
 enum PauseMenuAction {
     Resume,
+    Restart,
+    Setup,
     MainMenu,
     Quit,
 }
@@ -676,6 +678,8 @@ fn spawn_pause_menu(commands: &mut Commands) {
             ));
 
             pause_button(parent, "Resume", PauseMenuAction::Resume);
+            pause_button(parent, "Restart", PauseMenuAction::Restart);
+            pause_button(parent, "Setup", PauseMenuAction::Setup);
             pause_button(parent, "Main Menu", PauseMenuAction::MainMenu);
             pause_button(parent, "Quit", PauseMenuAction::Quit);
         });
@@ -683,8 +687,11 @@ fn spawn_pause_menu(commands: &mut Commands) {
 
 fn handle_pause_menu(
     mut pause: ResMut<PauseState>,
+    mut run: ResMut<RunState>,
     mut next_state: ResMut<NextState<GameState>>,
     mut exit: MessageWriter<AppExit>,
+    car_spawn: Res<CarSpawn>,
+    mut car: Single<(&mut Transform, &mut PlayerCar)>,
     buttons: Query<(&Interaction, &PauseMenuAction), (Changed<Interaction>, With<Button>)>,
 ) {
     if !pause.paused {
@@ -698,7 +705,19 @@ fn handle_pause_menu(
 
         match action {
             PauseMenuAction::Resume => pause.paused = false,
+            PauseMenuAction::Restart => {
+                run.reset();
+                let (transform, car) = &mut *car;
+                car.reset_to_spawn(transform, *car_spawn);
+                pause.paused = false;
+            }
+            PauseMenuAction::Setup => {
+                run.reset();
+                pause.paused = false;
+                next_state.set(GameState::Setup);
+            }
             PauseMenuAction::MainMenu => {
+                run.reset();
                 pause.paused = false;
                 next_state.set(GameState::MainMenu);
             }

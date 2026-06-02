@@ -564,16 +564,13 @@ Procedural assembly has started:
 * `track/piece.rs` now exposes one piece geometry contract for road spans, rail spans, and checkpoint/finish trigger lines.
 * Track spawning and validation now consume the same generated piece geometry instead of rebuilding road, rail, and trigger bounds separately.
 * Curves are now explicit generated piece kinds instead of straight pieces with curved frames, and generation inserts straight recovery after curves.
+* Pause flow now supports resume, restart, setup, main menu, and quit with run state reset on scene exits.
 
 ## Pending Work
 
 ### Product Shell
 
-Pending:
-
-* richer scene teardown/rebuild flows from setup/results back into driving
-
-This is the next sensible phase before adding more track complexity, because runtime track changes and setup screens both need explicit scene ownership and state transitions.
+Current shell flow is prototype-complete for the local session loop. Remaining work is presentation polish and more ergonomic setup controls, not core state ownership.
 
 ### Gameplay and Track
 
