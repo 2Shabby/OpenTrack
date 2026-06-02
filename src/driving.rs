@@ -51,7 +51,7 @@ impl Plugin for DrivingPlugin {
             )
             .add_systems(
                 Update,
-                (update_car_visuals, chase_camera)
+                (update_car_body_visual, update_wheel_visuals, chase_camera)
                     .chain()
                     .after(drive_car)
                     .run_if(in_state(GameState::Driving).and(not_paused)),
@@ -303,23 +303,11 @@ fn sample_wheel_contacts(
     }
 }
 
-fn update_car_visuals(
-    time: Res<Time>,
+fn update_car_body_visual(
     car: Single<(&Transform, &PlayerCar)>,
     mut body: Single<&mut Transform, (With<CarBodyVisual>, Without<PlayerCar>)>,
-    mut wheels: Query<
-        (
-            &mut Transform,
-            &WheelVisual,
-            &MeshMaterial3d<StandardMaterial>,
-        ),
-        Without<PlayerCar>,
-    >,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let (car_transform, car_state) = *car;
-    let forward = Vec3::new(car_state.yaw.sin(), 0.0, car_state.yaw.cos());
-    let right = Vec3::new(forward.z, 0.0, -forward.x);
     let roll = car_state.steer * car_state.velocity.length() * BODY_ROLL_RATE * -0.01;
     let pitch = car_state.throttle * BODY_PITCH_RATE;
 
@@ -327,6 +315,24 @@ fn update_car_visuals(
     body.rotation = Quat::from_rotation_y(car_state.yaw)
         * Quat::from_rotation_z(roll)
         * Quat::from_rotation_x(pitch);
+}
+
+fn update_wheel_visuals(
+    time: Res<Time>,
+    car: Single<(&Transform, &PlayerCar)>,
+    mut wheels: Query<
+        (
+            &mut Transform,
+            &WheelVisual,
+            &MeshMaterial3d<StandardMaterial>,
+        ),
+        (With<WheelVisual>, Without<PlayerCar>),
+    >,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let (car_transform, car_state) = *car;
+    let forward = Vec3::new(car_state.yaw.sin(), 0.0, car_state.yaw.cos());
+    let right = Vec3::new(forward.z, 0.0, -forward.x);
 
     let spin = time.elapsed_secs_wrapped() * car_state.signed_speed * 2.0;
     for (mut transform, wheel, material) in &mut wheels {
@@ -373,4 +379,22 @@ fn chase_camera(
 
     camera.translation = camera.translation.lerp(desired_position, smoothing);
     camera.look_at(target + forward * 4.0, Vec3::Y);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::state::app::StatesPlugin;
+
+    use crate::game_state::GameState;
+
+    #[test]
+    fn driving_plugin_registers_without_query_conflicts() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.init_state::<GameState>();
+        app.add_plugins(DrivingPlugin);
+
+        app.update();
+    }
 }
