@@ -126,8 +126,24 @@ impl GeneratedTrackInfo {
 #[derive(Clone, Copy, Debug)]
 pub enum TrackPieceKind {
     Straight,
+    Curve(TurnDirection),
     Checkpoint(usize),
     Finish,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TurnDirection {
+    Left,
+    Right,
+}
+
+impl TurnDirection {
+    fn side(self) -> f32 {
+        match self {
+            Self::Left => -1.0,
+            Self::Right => 1.0,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -169,6 +185,7 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
     let piece_count = recipe.piece_count.max(4);
     let checkpoint_index = piece_count / 2;
     let mut rng = ChaCha8Rng::seed_from_u64(recipe.seed);
+    let mut previous_was_curve = false;
     let mut entry = Pose2::new(
         Vec2::new(0.0, -((piece_count as f32) * PIECE_LENGTH * 0.5)),
         0.0,
@@ -176,12 +193,19 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
 
     (0..piece_count)
         .map(|index| {
-            let kind = piece_kind(index, piece_count, checkpoint_index);
+            let kind = piece_kind(
+                index,
+                piece_count,
+                checkpoint_index,
+                recipe.difficulty,
+                previous_was_curve,
+                &mut rng,
+            );
             let surface = match kind {
                 TrackPieceKind::Finish => SurfaceKind::Boost,
                 _ => generated_surface(recipe.surface_mix, &mut rng),
             };
-            let frames = generated_frames(entry, kind, recipe.difficulty, &mut rng);
+            let frames = generated_frames(entry, kind, recipe.difficulty);
             let exit = frames.last().map(|frame| frame.pose).unwrap_or(entry);
             let piece = TrackPiece {
                 kind,
@@ -190,6 +214,7 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
             };
 
             entry = exit;
+            previous_was_curve = matches!(piece.kind, TrackPieceKind::Curve(_));
             piece
         })
         .collect()
@@ -238,7 +263,7 @@ pub fn validate_track_pieces(pieces: &[TrackPiece]) -> Result<(), String> {
 
         if let Some(trigger) = geometry.trigger {
             let expected_pose = match piece.kind {
-                TrackPieceKind::Straight => piece.entry(),
+                TrackPieceKind::Straight | TrackPieceKind::Curve(_) => piece.entry(),
                 TrackPieceKind::Checkpoint(_) => piece.entry(),
                 TrackPieceKind::Finish => piece.exit(),
             };
@@ -254,6 +279,25 @@ pub fn validate_track_pieces(pieces: &[TrackPiece]) -> Result<(), String> {
                     "piece {index} trigger is misaligned by {:.4} and yaw {:.4}",
                     offset, yaw_delta
                 ));
+            }
+        }
+
+        match piece.kind {
+            TrackPieceKind::Straight | TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish => {
+                if piece.frames.len() != 2 {
+                    return Err(format!(
+                        "piece {index} has {} frames for a straight-aligned piece, expected 2",
+                        piece.frames.len()
+                    ));
+                }
+            }
+            TrackPieceKind::Curve(_) => {
+                if piece.frames.len() < 3 {
+                    return Err(format!(
+                        "piece {index} has {} curve frames, expected at least 3",
+                        piece.frames.len()
+                    ));
+                }
             }
         }
     }
@@ -311,13 +355,45 @@ pub fn forward_2d(yaw: f32) -> Vec2 {
     Pose2::new(Vec2::ZERO, yaw).forward()
 }
 
-fn piece_kind(index: usize, piece_count: usize, checkpoint_index: usize) -> TrackPieceKind {
+fn piece_kind(
+    index: usize,
+    piece_count: usize,
+    checkpoint_index: usize,
+    difficulty: u8,
+    previous_was_curve: bool,
+    rng: &mut ChaCha8Rng,
+) -> TrackPieceKind {
     if index == piece_count - 1 {
         TrackPieceKind::Finish
     } else if index == checkpoint_index {
         TrackPieceKind::Checkpoint(0)
+    } else if should_place_curve(difficulty, previous_was_curve, rng) {
+        TrackPieceKind::Curve(random_turn_direction(rng))
     } else {
         TrackPieceKind::Straight
+    }
+}
+
+fn should_place_curve(difficulty: u8, previous_was_curve: bool, rng: &mut ChaCha8Rng) -> bool {
+    if previous_was_curve {
+        return false;
+    }
+
+    let straight_weight = match difficulty {
+        0 => 8,
+        1 => 6,
+        2 => 4,
+        _ => 3,
+    };
+
+    rng.random_range(0..10) >= straight_weight
+}
+
+fn random_turn_direction(rng: &mut ChaCha8Rng) -> TurnDirection {
+    if rng.random_bool(0.5) {
+        TurnDirection::Right
+    } else {
+        TurnDirection::Left
     }
 }
 
@@ -338,27 +414,13 @@ fn generated_surface(surface_mix: SurfaceMix, rng: &mut ChaCha8Rng) -> SurfaceKi
     }
 }
 
-fn generated_frames(
-    entry: Pose2,
-    kind: TrackPieceKind,
-    difficulty: u8,
-    rng: &mut ChaCha8Rng,
-) -> Vec<PathFrame> {
-    let straight_chance = match difficulty {
-        0 => 8,
-        1 => 6,
-        2 => 4,
-        _ => 3,
-    };
-
-    if matches!(kind, TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish)
-        || rng.random_range(0..10) < straight_chance
-    {
-        return straight_frames(entry);
+fn generated_frames(entry: Pose2, kind: TrackPieceKind, difficulty: u8) -> Vec<PathFrame> {
+    match kind {
+        TrackPieceKind::Straight | TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish => {
+            straight_frames(entry)
+        }
+        TrackPieceKind::Curve(direction) => curve_frames(entry, direction, difficulty),
     }
-
-    let side = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
-    curve_frames(entry, side)
 }
 
 fn straight_frames(entry: Pose2) -> Vec<PathFrame> {
@@ -366,22 +428,27 @@ fn straight_frames(entry: Pose2) -> Vec<PathFrame> {
     vec![PathFrame { pose: entry }, PathFrame { pose: exit }]
 }
 
-fn curve_frames(entry: Pose2, side: f32) -> Vec<PathFrame> {
+fn curve_frames(entry: Pose2, direction: TurnDirection, difficulty: u8) -> Vec<PathFrame> {
     const CURVE_RADIUS: f32 = 24.0;
-    const CURVE_ANGLE: f32 = std::f32::consts::FRAC_PI_4;
     const CURVE_STEPS: usize = 6;
 
+    let curve_angle = match difficulty {
+        0 => std::f32::consts::FRAC_PI_6,
+        1 => std::f32::consts::FRAC_PI_4,
+        _ => std::f32::consts::FRAC_PI_3,
+    };
+    let side = direction.side();
     let center = entry.position + entry.right() * side * CURVE_RADIUS;
     let radius_vector = -entry.right() * side * CURVE_RADIUS;
 
     (0..=CURVE_STEPS)
         .map(|step| {
             let t = step as f32 / CURVE_STEPS as f32;
-            let angle = side * CURVE_ANGLE * t;
+            let angle = side * curve_angle * t;
             PathFrame {
                 pose: Pose2::new(
                     center + rotate_2d(radius_vector, angle),
-                    entry.yaw + side * CURVE_ANGLE * t,
+                    entry.yaw + side * curve_angle * t,
                 ),
             }
         })

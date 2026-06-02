@@ -563,6 +563,7 @@ Procedural assembly has started:
 * Setup recipe controls now include difficulty and surface mix, and generation uses them for curve frequency and surface weighting.
 * `track/piece.rs` now exposes one piece geometry contract for road spans, rail spans, and checkpoint/finish trigger lines.
 * Track spawning and validation now consume the same generated piece geometry instead of rebuilding road, rail, and trigger bounds separately.
+* Curves are now explicit generated piece kinds instead of straight pieces with curved frames, and generation inserts straight recovery after curves.
 
 ## Pending Work
 
@@ -579,7 +580,7 @@ This is the next sensible phase before adding more track complexity, because run
 Pending:
 
 * expand the piece-library contract with authored piece metadata, difficulty tags, and connection rules
-* expand generated piece sequences beyond simple straight/arc choices
+* expand generated piece sequences beyond straight, curve, checkpoint, and finish pieces
 * improve curve piece variety and validation
 * checkpoint and finish line placement for every future piece type
 * add overlap and unreachable-finish validation once routes become more complex
