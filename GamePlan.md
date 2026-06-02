@@ -546,6 +546,7 @@ Procedural assembly has started:
 * App now starts at a basic main menu and enters gameplay through one `MainMenu -> Driving` state transition.
 * Track/session spawning now happens on entering `Driving`; generated scene cleanup is state-owned.
 * Escape opens an in-game pause overlay; resume preserves the active driving scene and main menu exits cleanly.
+* Setup screen configures player count, track seed, track length, and car color before spawning gameplay.
 
 ## Pending Work
 
@@ -553,9 +554,6 @@ Procedural assembly has started:
 
 Pending:
 
-* hotseat player setup screen
-* track recipe/seed/length selection screen
-* car color selection screen
 * post-run/results screen
 * in-memory leaderboard view
 * richer scene teardown/rebuild flows from setup/results back into driving

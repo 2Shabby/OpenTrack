@@ -66,6 +66,17 @@ impl HotseatSession {
             .map(|entry| (entry.player_name.as_str(), entry.finish_time))
     }
 
+    pub fn configure_player_count(&mut self, player_count: usize) {
+        let player_count = player_count.max(1);
+        self.players = (1..=player_count)
+            .map(|index| Player {
+                name: format!("Driver {index}"),
+            })
+            .collect();
+        self.current_player = 0;
+        self.leaderboard.clear();
+    }
+
     fn add_player(&mut self) {
         let index = self.players.len() + 1;
         self.players.push(Player {

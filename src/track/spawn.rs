@@ -11,7 +11,7 @@ use super::markers::{
 use super::road_mesh::road_surface_mesh;
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::sports_car_mesh;
-use crate::driving::{CarSpawn, ChaseCamera, PlayerCar};
+use crate::driving::{CarPaint, CarSpawn, ChaseCamera, PlayerCar};
 use crate::physics::RailCollider;
 use crate::run::{TrackTrigger, TrackTriggerKind};
 use crate::spatial::{OrientedRect, Pose2, forward_3d};
@@ -21,6 +21,7 @@ pub fn spawn_generated_track(
     mut commands: Commands,
     recipe: &TrackRecipe,
     asset_server: &AssetServer,
+    car_paint: &CarPaint,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -41,7 +42,13 @@ pub fn spawn_generated_track(
     commands.insert_resource(track_info);
     commands.insert_resource(car_spawn);
 
-    spawn_car(&mut commands, &mut meshes, &mut materials, car_spawn);
+    spawn_car(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        car_spawn,
+        *car_paint,
+    );
     spawn_lighting(&mut commands);
     spawn_camera(&mut commands, car_spawn);
 }
@@ -146,11 +153,12 @@ fn spawn_car(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     car_spawn: CarSpawn,
+    car_paint: CarPaint,
 ) {
     commands.spawn((
         Mesh3d(meshes.add(sports_car_mesh())),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.92, 0.08, 0.05),
+            base_color: car_paint.color,
             metallic: 0.15,
             perceptual_roughness: 0.45,
             ..default()

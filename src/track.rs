@@ -9,6 +9,7 @@ pub use markers::{GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, Spawned
 
 use bevy::prelude::*;
 
+use crate::driving::CarPaint;
 use crate::game_state::GameState;
 
 pub struct TrackPlugin;
@@ -25,10 +26,18 @@ pub fn spawn_sandbox_track(
     commands: Commands,
     recipe: Res<TrackRecipe>,
     asset_server: Res<AssetServer>,
+    car_paint: Res<CarPaint>,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    spawn::spawn_generated_track(commands, &recipe, &asset_server, meshes, materials);
+    spawn::spawn_generated_track(
+        commands,
+        &recipe,
+        &asset_server,
+        &car_paint,
+        meshes,
+        materials,
+    );
 }
 
 fn despawn_spawned_scene(
