@@ -152,6 +152,15 @@ Design principle:
 Depth comes from tracks, surfaces, ghosts, retries, and player execution — not vehicle subsystem complexity.
 ```
 
+Arcade drift direction:
+
+* keep the custom gameplay controller instead of adopting a full tire simulator
+* model drift as an explicit handling state/assist layered over the current velocity/yaw controller
+* use lateral slip, speed, steering, throttle, and braking to enter/hold/exit drift
+* allow controlled counter-steer behavior instead of full spin-out simulation
+* tune drift by changing lateral grip, yaw authority, and damping rather than adding drivetrain complexity
+* keep reverse steering separate from forward drift behavior so backing up stays predictable
+
 ## Surfaces
 
 Surfaces are data-driven and affect handling.
@@ -218,6 +227,19 @@ difficulty rating
 connection rules
 trigger/checkpoint data
 ```
+
+Curved piece authoring direction:
+
+* stop treating curves as rotated rectangles
+* define a centerline/path first, then derive all other geometry from it
+* sample the centerline at fixed arc-length intervals
+* build road mesh vertices from sampled tangent/right vectors and track width
+* build rails from the same samples and edge offsets
+* build surface/collision zones from the same samples or segment rectangles
+* place checkpoint/finish trigger lines perpendicular to the sampled tangent
+* validate by checking adjacent samples, edge continuity, rail continuity, and trigger alignment
+
+Initial curve implementation should use constant-curvature arcs or short sampled splines before clothoids. Clothoid-style transitions are a later quality upgrade for smoother high-speed turns, not a prerequisite for the first correct curve pieces.
 
 Generation passes:
 
@@ -538,6 +560,9 @@ Pending:
 * generated piece sequences beyond a fixed straight chain
 * a real piece-library contract for visuals, road surface zones, rails, triggers, and colliders
 * curve pieces with geometry and collision generated from the same data
+* sampled centerline data type for curved pieces
+* road mesh generation from sampled path frames
+* rail segment generation from road edge samples
 * better off-track behavior once border collision is stable
 * checkpoint and finish line placement for every future piece type
 * recipe controls for seed, length, surface mix, and difficulty
@@ -548,6 +573,8 @@ Pending:
 Pending:
 
 * continued tuning of reverse/brake/steering feel
+* explicit drift/slip state in the arcade driving model
+* counter-steer and spin-out damping assist tuned for Trackmania-like readability
 * better collision response at high speed
 * visual feedback for surface transitions and boost
 * optional controller support once keyboard feel stabilizes
