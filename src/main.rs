@@ -1,5 +1,7 @@
+mod car_asset;
 mod debug;
 mod driving;
+mod ghost;
 mod hotseat;
 mod physics;
 mod run;
@@ -9,6 +11,7 @@ mod track;
 use bevy::prelude::*;
 use debug::DebugPlugin;
 use driving::DrivingPlugin;
+use ghost::GhostPlugin;
 use hotseat::HotseatPlugin;
 use physics::PhysicsQueriesPlugin;
 use run::RunPlugin;
@@ -33,6 +36,7 @@ fn main() {
             DrivingPlugin,
             RunPlugin,
             HotseatPlugin,
+            GhostPlugin,
             DebugPlugin,
         ))
         .add_systems(Startup, spawn_sandbox_track)

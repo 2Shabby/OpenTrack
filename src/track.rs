@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::car_asset::sports_car_mesh;
 use crate::driving::{CAR_START, ChaseCamera, PlayerCar};
 use crate::physics::RailCollider;
 use crate::run::{TrackTrigger, TrackTriggerKind};
@@ -175,9 +176,11 @@ fn spawn_car(
     materials: &mut Assets<StandardMaterial>,
 ) {
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.35, 0.55, 2.2))),
+        Mesh3d(meshes.add(sports_car_mesh())),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.95, 0.13, 0.08),
+            base_color: Color::srgb(0.92, 0.08, 0.05),
+            metallic: 0.15,
+            perceptual_roughness: 0.45,
             ..default()
         })),
         Transform::from_translation(CAR_START),

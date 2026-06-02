@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::physics::{EcsTrackPhysicsQueries, RailCollider, TrackPhysicsQueries};
 use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
 
-pub const CAR_START: Vec3 = Vec3::new(0.0, 0.35, -26.0);
+pub const CAR_START: Vec3 = Vec3::new(0.0, 0.05, -26.0);
 
 pub struct DrivingPlugin;
 

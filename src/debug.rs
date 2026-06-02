@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::driving::PlayerCar;
+use crate::ghost::SessionBestGhost;
 use crate::hotseat::HotseatSession;
 use crate::run::RunState;
 use crate::surface::SurfaceLibrary;
@@ -38,6 +39,7 @@ fn spawn_debug_overlay(mut commands: Commands) {
 fn update_debug_overlay(
     car: Single<&PlayerCar>,
     run: Res<RunState>,
+    ghost: Res<SessionBestGhost>,
     hotseat: Res<HotseatSession>,
     surfaces: Res<SurfaceLibrary>,
     mut overlay: Single<&mut Text, With<DebugOverlay>>,
@@ -47,12 +49,17 @@ fn update_debug_overlay(
         .best_entry()
         .map(|entry| format!("{} {:.2}", entry.player_name, entry.finish_time))
         .unwrap_or_else(|| "none".to_string());
+    let ghost_best = ghost
+        .finish_time()
+        .map(|time| format!("{time:.2}"))
+        .unwrap_or_else(|| "none".to_string());
 
     overlay.0 = format!(
-        "player: {}\nplayers: {}\nbest: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
+        "player: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
         hotseat.active_player_name(),
         hotseat.players.len(),
         best,
+        ghost_best,
         run.elapsed,
         run.status_label(),
         run.next_checkpoint,

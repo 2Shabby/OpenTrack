@@ -521,6 +521,26 @@ Milestone 5 has a first local-only pass:
 
 No player profiles, save files, or persistent leaderboard storage are included.
 
+## Eighth Code Slice
+
+Milestone 6 has a first session-only pass:
+
+* `src/ghost.rs` records sampled transforms during running attempts
+* completed runs can become the session best ghost
+* a translucent ghost car replays the best run at matching elapsed time
+* debug overlay shows whether a ghost best exists
+
+Ghost data is in-memory only and is discarded when the app exits.
+
+## Ninth Code Slice
+
+Car visuals now use the local asset pack:
+
+* `assets/cars/SportsCar.obj` and its license come from `~/Downloads/Realistic Car Pack - Nov 2018.zip`
+* `src/car_asset.rs` contains a small OBJ-to-Bevy-mesh parser for this asset
+* player and ghost use the same sports-car mesh with different materials/colors
+* rail collision half-extents were updated to match the longer realistic car footprint
+
 ## Milestones
 
 ### 1. Driving Sandbox

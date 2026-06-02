@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::surface::{SurfaceKind, SurfaceZone};
 
-const CAR_COLLISION_HALF_EXTENTS: Vec2 = Vec2::new(0.78, 1.05);
+const CAR_COLLISION_HALF_EXTENTS: Vec2 = Vec2::new(0.98, 2.05);
 
 pub struct PhysicsQueriesPlugin;
 
