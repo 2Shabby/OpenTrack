@@ -132,6 +132,8 @@ enum PauseMenuAction {
 }
 
 fn spawn_main_menu(mut commands: Commands) {
+    commands.spawn((Camera2d, MainMenuEntity));
+
     commands
         .spawn((
             Node {
@@ -163,6 +165,8 @@ fn spawn_main_menu(mut commands: Commands) {
 }
 
 fn spawn_setup_screen(mut commands: Commands) {
+    commands.spawn((Camera2d, SetupEntity));
+
     commands
         .spawn((
             Node {
@@ -237,6 +241,8 @@ fn spawn_setup_screen(mut commands: Commands) {
 }
 
 fn spawn_results_screen(mut commands: Commands, run: Res<RunState>, hotseat: Res<HotseatSession>) {
+    commands.spawn((Camera2d, ResultsEntity));
+
     let leaderboard = hotseat.leaderboard_lines();
     let leaderboard_text = if leaderboard.is_empty() {
         "No finishes yet".to_string()
@@ -725,5 +731,30 @@ fn handle_pause_menu(
                 exit.write(AppExit::Success);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::state::app::StatesPlugin;
+
+    use crate::game_state::GameState;
+    use crate::hotseat::HotseatPlugin;
+    use crate::run::RunPlugin;
+
+    #[test]
+    fn main_menu_spawns_ui_camera() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.init_state::<GameState>();
+        app.add_plugins((RunPlugin, HotseatPlugin, ShellPlugin));
+
+        app.update();
+
+        let mut cameras = app
+            .world_mut()
+            .query_filtered::<(), (With<Camera2d>, With<MainMenuEntity>)>();
+        assert_eq!(cameras.iter(app.world()).count(), 1);
     }
 }
