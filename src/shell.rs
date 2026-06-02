@@ -5,7 +5,7 @@ use crate::driving::CarPaint;
 use crate::game_state::{GameState, PauseState};
 use crate::hotseat::HotseatSession;
 use crate::run::{RunState, RunStatus};
-use crate::track::TrackRecipe;
+use crate::track::{SurfaceMix, TrackRecipe};
 
 pub struct ShellPlugin;
 
@@ -50,6 +50,8 @@ struct SessionSetup {
     player_count: usize,
     seed: u64,
     piece_count: usize,
+    difficulty: u8,
+    surface_mix: SurfaceMix,
     car_color_index: usize,
 }
 
@@ -59,6 +61,8 @@ impl Default for SessionSetup {
             player_count: 2,
             seed: 0x5EED_2026,
             piece_count: 8,
+            difficulty: 1,
+            surface_mix: SurfaceMix::Balanced,
             car_color_index: 0,
         }
     }
@@ -84,6 +88,10 @@ enum SetupAction {
     SeedUp,
     LengthDown,
     LengthUp,
+    DifficultyDown,
+    DifficultyUp,
+    SurfaceMixDown,
+    SurfaceMixUp,
     ColorDown,
     ColorUp,
     StartRace,
@@ -95,6 +103,8 @@ enum SetupValue {
     Players,
     Seed,
     Length,
+    Difficulty,
+    SurfaceMix,
     Color,
 }
 
@@ -196,6 +206,20 @@ fn spawn_setup_screen(mut commands: Commands) {
                 SetupValue::Length,
                 SetupAction::LengthDown,
                 SetupAction::LengthUp,
+            );
+            setup_row(
+                parent,
+                "Difficulty",
+                SetupValue::Difficulty,
+                SetupAction::DifficultyDown,
+                SetupAction::DifficultyUp,
+            );
+            setup_row(
+                parent,
+                "Surface",
+                SetupValue::SurfaceMix,
+                SetupAction::SurfaceMixDown,
+                SetupAction::SurfaceMixUp,
             );
             setup_row(
                 parent,
@@ -480,6 +504,12 @@ fn handle_setup_screen(
                 setup.piece_count = setup.piece_count.saturating_sub(1).max(4)
             }
             SetupAction::LengthUp => setup.piece_count = (setup.piece_count + 1).min(64),
+            SetupAction::DifficultyDown => {
+                setup.difficulty = setup.difficulty.saturating_sub(1);
+            }
+            SetupAction::DifficultyUp => setup.difficulty = (setup.difficulty + 1).min(3),
+            SetupAction::SurfaceMixDown => setup.surface_mix = setup.surface_mix.previous(),
+            SetupAction::SurfaceMixUp => setup.surface_mix = setup.surface_mix.next(),
             SetupAction::ColorDown => {
                 setup.car_color_index = setup.car_color_index.saturating_sub(1);
             }
@@ -489,6 +519,8 @@ fn handle_setup_screen(
             SetupAction::StartRace => {
                 recipe.seed = setup.seed;
                 recipe.piece_count = setup.piece_count;
+                recipe.difficulty = setup.difficulty;
+                recipe.surface_mix = setup.surface_mix;
                 hotseat.configure_player_count(setup.player_count);
                 car_paint.color = car_color(setup.car_color_index);
                 run.reset();
@@ -505,6 +537,8 @@ fn update_setup_values(setup: Res<SessionSetup>, mut values: Query<(&mut Text, &
             SetupValue::Players => setup.player_count.to_string(),
             SetupValue::Seed => setup.seed.to_string(),
             SetupValue::Length => setup.piece_count.to_string(),
+            SetupValue::Difficulty => setup.difficulty.to_string(),
+            SetupValue::SurfaceMix => setup.surface_mix.label().to_string(),
             SetupValue::Color => car_color_name(setup.car_color_index).to_string(),
         };
     }

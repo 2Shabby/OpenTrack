@@ -4,7 +4,7 @@ mod road_mesh;
 mod scenery;
 mod spawn;
 
-pub use generation::{GeneratedTrackInfo, TrackRecipe};
+pub use generation::{GeneratedTrackInfo, SurfaceMix, TrackRecipe};
 pub use markers::{GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, SpawnedSceneEntity};
 
 use bevy::prelude::*;

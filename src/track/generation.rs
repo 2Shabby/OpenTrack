@@ -15,6 +15,8 @@ pub const RAIL_THICKNESS: f32 = 0.28;
 pub struct TrackRecipe {
     pub seed: u64,
     pub piece_count: usize,
+    pub difficulty: u8,
+    pub surface_mix: SurfaceMix,
 }
 
 impl Default for TrackRecipe {
@@ -22,6 +24,41 @@ impl Default for TrackRecipe {
         Self {
             seed: 0x5EED_2026,
             piece_count: 8,
+            difficulty: 1,
+            surface_mix: SurfaceMix::Balanced,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SurfaceMix {
+    Balanced,
+    Technical,
+    Fast,
+}
+
+impl SurfaceMix {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Balanced => "Balanced",
+            Self::Technical => "Technical",
+            Self::Fast => "Fast",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Balanced => Self::Technical,
+            Self::Technical => Self::Fast,
+            Self::Fast => Self::Balanced,
+        }
+    }
+
+    pub fn previous(self) -> Self {
+        match self {
+            Self::Balanced => Self::Fast,
+            Self::Technical => Self::Balanced,
+            Self::Fast => Self::Technical,
         }
     }
 }
@@ -198,9 +235,9 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
             let kind = piece_kind(index, piece_count, checkpoint_index);
             let surface = match kind {
                 TrackPieceKind::Finish => SurfaceKind::Boost,
-                _ => generated_surface(&mut rng),
+                _ => generated_surface(recipe.surface_mix, &mut rng),
             };
-            let frames = generated_frames(entry, kind, &mut rng);
+            let frames = generated_frames(entry, kind, recipe.difficulty, &mut rng);
             let exit = frames.last().map(|frame| frame.pose).unwrap_or(entry);
             let piece = TrackPiece {
                 kind,
@@ -310,18 +347,38 @@ fn piece_kind(index: usize, piece_count: usize, checkpoint_index: usize) -> Trac
     }
 }
 
-fn generated_surface(rng: &mut ChaCha8Rng) -> SurfaceKind {
-    match rng.random_range(0..10) {
-        0..=5 => SurfaceKind::Asphalt,
-        6..=7 => SurfaceKind::Dirt,
-        8 => SurfaceKind::Ice,
-        _ => SurfaceKind::Boost,
+fn generated_surface(surface_mix: SurfaceMix, rng: &mut ChaCha8Rng) -> SurfaceKind {
+    match (surface_mix, rng.random_range(0..12)) {
+        (SurfaceMix::Balanced, 0..=6) => SurfaceKind::Asphalt,
+        (SurfaceMix::Balanced, 7..=8) => SurfaceKind::Dirt,
+        (SurfaceMix::Balanced, 9..=10) => SurfaceKind::Ice,
+        (SurfaceMix::Balanced, _) => SurfaceKind::Boost,
+        (SurfaceMix::Technical, 0..=3) => SurfaceKind::Asphalt,
+        (SurfaceMix::Technical, 4..=7) => SurfaceKind::Dirt,
+        (SurfaceMix::Technical, 8..=10) => SurfaceKind::Ice,
+        (SurfaceMix::Technical, _) => SurfaceKind::Boost,
+        (SurfaceMix::Fast, 0..=7) => SurfaceKind::Asphalt,
+        (SurfaceMix::Fast, 8) => SurfaceKind::Dirt,
+        (SurfaceMix::Fast, 9) => SurfaceKind::Ice,
+        (SurfaceMix::Fast, _) => SurfaceKind::Boost,
     }
 }
 
-fn generated_frames(entry: Pose2, kind: TrackPieceKind, rng: &mut ChaCha8Rng) -> Vec<PathFrame> {
+fn generated_frames(
+    entry: Pose2,
+    kind: TrackPieceKind,
+    difficulty: u8,
+    rng: &mut ChaCha8Rng,
+) -> Vec<PathFrame> {
+    let straight_chance = match difficulty {
+        0 => 8,
+        1 => 6,
+        2 => 4,
+        _ => 3,
+    };
+
     if matches!(kind, TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish)
-        || rng.random_range(0..10) < 6
+        || rng.random_range(0..10) < straight_chance
     {
         return straight_frames(entry);
     }

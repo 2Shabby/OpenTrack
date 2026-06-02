@@ -560,6 +560,7 @@ Procedural assembly has started:
 * Four-wheel contact samples now affect lateral grip, so split-surface cases change handling.
 * Off-track fallback surface is now grass instead of asphalt, with slower acceleration and higher drag.
 * Wheel visuals tint by contact surface, and HUD shows handling/surface state.
+* Setup recipe controls now include difficulty and surface mix, and generation uses them for curve frequency and surface weighting.
 
 ## Pending Work
 
@@ -580,7 +581,6 @@ Pending:
 * expand generated piece sequences beyond simple straight/arc choices
 * improve curve piece variety and validation
 * checkpoint and finish line placement for every future piece type
-* recipe controls for seed, length, surface mix, and difficulty
 * add overlap and unreachable-finish validation once routes become more complex
 
 ### Vehicle and Feel
