@@ -36,6 +36,43 @@ pub struct GeneratedTrackInfo {
     pub trigger_count: usize,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TrackBounds {
+    pub center: Vec2,
+    pub half_extents: Vec2,
+}
+
+impl TrackBounds {
+    pub fn from_pieces(pieces: &[TrackPiece]) -> Self {
+        let mut min = Vec2::splat(f32::INFINITY);
+        let mut max = Vec2::splat(f32::NEG_INFINITY);
+
+        for frame in pieces.iter().flat_map(|piece| piece.frames.iter()) {
+            min = min.min(frame.pose.position);
+            max = max.max(frame.pose.position);
+        }
+
+        if !min.is_finite() || !max.is_finite() {
+            return Self {
+                center: Vec2::ZERO,
+                half_extents: Vec2::splat(45.0),
+            };
+        }
+
+        let center = (min + max) * 0.5;
+        let half_extents = ((max - min) * 0.5) + Vec2::splat(TRACK_WIDTH * 2.5);
+
+        Self {
+            center,
+            half_extents,
+        }
+    }
+
+    pub fn grass_size(self) -> Vec2 {
+        (self.half_extents + Vec2::splat(28.0)) * 2.0
+    }
+}
+
 impl GeneratedTrackInfo {
     pub fn from_pieces(recipe: &TrackRecipe, pieces: &[TrackPiece]) -> Self {
         Self {

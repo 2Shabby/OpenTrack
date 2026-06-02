@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use super::generation::{
-    GeneratedTrackInfo, PathFrame, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece,
-    TrackPieceKind, TrackRecipe, TrackSegment, car_spawn_for, generate_track_pieces,
+    GeneratedTrackInfo, PathFrame, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackBounds,
+    TrackPiece, TrackPieceKind, TrackRecipe, TrackSegment, car_spawn_for, generate_track_pieces,
     validate_piece_connections,
 };
 use super::markers::{
@@ -26,15 +26,22 @@ pub fn spawn_generated_track(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    spawn_grass_field(&mut commands, &mut meshes, &mut materials);
-    spawn_forest_scenery(&mut commands, asset_server, &mut meshes, &mut materials);
-
     let pieces = generate_track_pieces(recipe);
     if let Err(error) = validate_piece_connections(&pieces) {
         warn!("generated track connection validation failed: {error}");
     }
+    let track_bounds = TrackBounds::from_pieces(&pieces);
     let track_info = GeneratedTrackInfo::from_pieces(recipe, &pieces);
     let car_spawn = car_spawn_for(&pieces);
+
+    spawn_grass_field(&mut commands, &mut meshes, &mut materials, track_bounds);
+    spawn_forest_scenery(
+        &mut commands,
+        asset_server,
+        &mut meshes,
+        &mut materials,
+        track_bounds,
+    );
 
     for piece in pieces.iter() {
         spawn_piece(&mut commands, &mut meshes, &mut materials, piece);

@@ -555,6 +555,7 @@ Procedural assembly has started:
 * First-pass drift assist uses slip state to reduce lateral damping and add controlled yaw assist while sliding.
 * Car visuals now use separate body and wheel primitives with body roll/pitch, front-wheel steering, and wheel spin.
 * In-run HUD shows driver, timer, checkpoint progress, speed, best time, and ghost time; verbose debug is toggled with F3.
+* Grass field, forest, and rocks are placed relative to generated track bounds instead of fixed world coordinates.
 
 ## Pending Work
 
@@ -606,7 +607,6 @@ Pending:
 
 * support multiple car colors from the same mesh
 * improve track visuals beyond flat planes and cuboid rails
-* place forest scenery relative to generated track bounds instead of fixed coordinates
 * add simple audio feedback after the core loop is stable
 
 ### Persistence

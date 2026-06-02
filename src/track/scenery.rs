@@ -1,20 +1,24 @@
 use bevy::prelude::*;
 
+use super::generation::TrackBounds;
 use super::markers::{GeneratedEnvironment, GeneratedScenery, SpawnedSceneEntity};
 
 pub fn spawn_grass_field(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    bounds: TrackBounds,
 ) {
+    let size = bounds.grass_size();
+
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(90.0, 90.0))),
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(size.x, size.y))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.16, 0.34, 0.13),
             perceptual_roughness: 0.98,
             ..default()
         })),
-        Transform::from_xyz(0.0, -0.015, 0.0),
+        Transform::from_xyz(bounds.center.x, -0.015, bounds.center.y),
         GeneratedEnvironment,
         SpawnedSceneEntity,
     ));
@@ -25,6 +29,7 @@ pub fn spawn_forest_scenery(
     asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    bounds: TrackBounds,
 ) {
     let oak_leaf = materials.add(StandardMaterial {
         base_color: Color::srgb(0.28, 0.58, 0.18),
@@ -57,7 +62,7 @@ pub fn spawn_forest_scenery(
         ..default()
     });
 
-    for (index, position) in tree_positions().into_iter().enumerate() {
+    for (index, position) in tree_positions(bounds).into_iter().enumerate() {
         if index % 2 == 0 {
             spawn_oak_tree(
                 commands,
@@ -77,7 +82,7 @@ pub fn spawn_forest_scenery(
         }
     }
 
-    for (index, position) in rock_positions().into_iter().enumerate() {
+    for (index, position) in rock_positions(bounds).into_iter().enumerate() {
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(1.4, 0.7, 1.0))),
             MeshMaterial3d(rock.clone()),
@@ -142,26 +147,32 @@ fn spawn_spruce_tree(
     }
 }
 
-fn tree_positions() -> [Vec3; 10] {
+fn tree_positions(bounds: TrackBounds) -> [Vec3; 10] {
+    let center = bounds.center;
+    let edge = bounds.half_extents + Vec2::splat(10.0);
+
     [
-        Vec3::new(-18.0, 0.0, -30.0),
-        Vec3::new(17.0, 0.0, -28.0),
-        Vec3::new(-23.0, 0.0, -18.0),
-        Vec3::new(20.0, 0.0, -12.0),
-        Vec3::new(-19.0, 0.0, -3.0),
-        Vec3::new(24.0, 0.0, 5.0),
-        Vec3::new(-22.0, 0.0, 14.0),
-        Vec3::new(18.0, 0.0, 23.0),
-        Vec3::new(-16.0, 0.0, 31.0),
-        Vec3::new(23.0, 0.0, 33.0),
+        Vec3::new(center.x - edge.x, 0.0, center.y - edge.y),
+        Vec3::new(center.x + edge.x, 0.0, center.y - edge.y * 0.86),
+        Vec3::new(center.x - edge.x * 1.05, 0.0, center.y - edge.y * 0.45),
+        Vec3::new(center.x + edge.x * 0.95, 0.0, center.y - edge.y * 0.15),
+        Vec3::new(center.x - edge.x * 0.98, 0.0, center.y + edge.y * 0.14),
+        Vec3::new(center.x + edge.x * 1.08, 0.0, center.y + edge.y * 0.38),
+        Vec3::new(center.x - edge.x * 1.02, 0.0, center.y + edge.y * 0.62),
+        Vec3::new(center.x + edge.x * 0.92, 0.0, center.y + edge.y * 0.78),
+        Vec3::new(center.x - edge.x * 0.68, 0.0, center.y + edge.y),
+        Vec3::new(center.x + edge.x * 0.74, 0.0, center.y + edge.y * 1.04),
     ]
 }
 
-fn rock_positions() -> [Vec3; 4] {
+fn rock_positions(bounds: TrackBounds) -> [Vec3; 4] {
+    let center = bounds.center;
+    let edge = bounds.half_extents + Vec2::splat(5.0);
+
     [
-        Vec3::new(-13.5, 0.0, -22.0),
-        Vec3::new(14.5, 0.0, -4.0),
-        Vec3::new(-14.0, 0.0, 10.0),
-        Vec3::new(13.5, 0.0, 28.0),
+        Vec3::new(center.x - edge.x * 0.72, 0.0, center.y - edge.y * 0.7),
+        Vec3::new(center.x + edge.x * 0.7, 0.0, center.y - edge.y * 0.2),
+        Vec3::new(center.x - edge.x * 0.62, 0.0, center.y + edge.y * 0.34),
+        Vec3::new(center.x + edge.x * 0.64, 0.0, center.y + edge.y * 0.82),
     ]
 }
