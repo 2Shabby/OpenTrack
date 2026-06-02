@@ -553,6 +553,7 @@ Procedural assembly has started:
 * Driving model samples four wheel surface contacts and reports them in debug for split-surface drift tuning.
 * First-pass drift assist uses slip state to reduce lateral damping and add controlled yaw assist while sliding.
 * Car visuals now use separate body and wheel primitives with body roll/pitch, front-wheel steering, and wheel spin.
+* In-run HUD shows driver, timer, checkpoint progress, speed, best time, and ghost time; verbose debug is toggled with F3.
 
 ## Pending Work
 
@@ -595,9 +596,7 @@ Pending:
 
 Pending:
 
-* replace the debug overlay with a proper in-run HUD
-* show timer, checkpoint progress, current player, best time, and ghost status
-* keep debug/tuning data behind a debug toggle
+* improve HUD visual design and layout polish
 
 ### Assets and Presentation
 

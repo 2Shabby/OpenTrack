@@ -12,13 +12,19 @@ pub struct DebugPlugin;
 
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Driving), spawn_debug_overlay)
+        app.init_resource::<DebugOverlayState>()
+            .add_systems(OnEnter(GameState::Driving), spawn_debug_overlay)
             .add_systems(
                 Update,
-                update_debug_overlay.run_if(in_state(GameState::Driving)),
+                (toggle_debug_overlay, update_debug_overlay).run_if(in_state(GameState::Driving)),
             )
             .add_systems(OnExit(GameState::Driving), despawn_debug_overlay);
     }
+}
+
+#[derive(Resource, Default)]
+struct DebugOverlayState {
+    visible: bool,
 }
 
 #[derive(Component)]
@@ -38,6 +44,7 @@ fn spawn_debug_overlay(mut commands: Commands) {
             left: px(12),
             ..default()
         },
+        Visibility::Hidden,
         DebugOverlay,
     ));
 }
@@ -49,6 +56,7 @@ fn despawn_debug_overlay(mut commands: Commands, overlays: Query<Entity, With<De
 }
 
 fn update_debug_overlay(
+    debug: Res<DebugOverlayState>,
     car: Single<&PlayerCar>,
     run: Res<RunState>,
     ghost: Res<SessionBestGhost>,
@@ -58,8 +66,17 @@ fn update_debug_overlay(
     road_surfaces: Query<(), With<GeneratedRoadSurface>>,
     rails: Query<(), With<GeneratedRail>>,
     triggers: Query<(), With<GeneratedTrigger>>,
-    mut overlay: Single<&mut Text, With<DebugOverlay>>,
+    mut overlay: Single<(&mut Text, &mut Visibility), With<DebugOverlay>>,
 ) {
+    overlay.1.set_if_neq(if debug.visible {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    });
+    if !debug.visible {
+        return;
+    }
+
     let params = surfaces.get(car.current_surface);
     let best = hotseat
         .best_summary()
@@ -70,7 +87,7 @@ fn update_debug_overlay(
         .map(|time| format!("{time:.2}"))
         .unwrap_or_else(|| "none".to_string());
 
-    overlay.0 = format!(
+    overlay.0.0 = format!(
         "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nhandling: {}\nslip: {:>4.0} deg\nsurface: {}\nwheels: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
         track.seed,
         track.piece_count,
@@ -101,4 +118,10 @@ fn update_debug_overlay(
         params.lateral_grip,
         params.acceleration_multiplier,
     );
+}
+
+fn toggle_debug_overlay(keys: Res<ButtonInput<KeyCode>>, mut debug: ResMut<DebugOverlayState>) {
+    if keys.just_pressed(KeyCode::F3) {
+        debug.visible = !debug.visible;
+    }
 }

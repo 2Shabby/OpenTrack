@@ -4,6 +4,7 @@ mod driving;
 mod game_state;
 mod ghost;
 mod hotseat;
+mod hud;
 mod physics;
 mod run;
 mod shell;
@@ -16,6 +17,7 @@ use debug::DebugPlugin;
 use driving::DrivingPlugin;
 use ghost::GhostPlugin;
 use hotseat::HotseatPlugin;
+use hud::HudPlugin;
 use physics::PhysicsQueriesPlugin;
 use run::RunPlugin;
 use shell::ShellPlugin;
@@ -42,6 +44,7 @@ fn main() {
             RunPlugin,
             HotseatPlugin,
             GhostPlugin,
+            HudPlugin,
             DebugPlugin,
             ShellPlugin,
         ))
