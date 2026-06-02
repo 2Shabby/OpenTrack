@@ -15,6 +15,8 @@ pub struct DrivingTuning {
     pub max_forward_speed: f32,
     pub max_reverse_speed: f32,
     pub reverse_steering_threshold: f32,
+    pub slide_speed_threshold: f32,
+    pub slide_slip_angle_threshold: f32,
 }
 
 impl Default for DrivingTuning {
@@ -31,6 +33,8 @@ impl Default for DrivingTuning {
             max_forward_speed: 58.0,
             max_reverse_speed: 14.0,
             reverse_steering_threshold: 0.8,
+            slide_speed_threshold: 8.0,
+            slide_slip_angle_threshold: 0.35,
         }
     }
 }
@@ -40,6 +44,21 @@ pub enum DriveMode {
     Forward,
     Braking,
     Reverse,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HandlingState {
+    Grip,
+    Sliding,
+}
+
+impl HandlingState {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Grip => "grip",
+            Self::Sliding => "sliding",
+        }
+    }
 }
 
 impl DriveMode {
@@ -93,6 +112,12 @@ impl MotionBasis {
             lateral_speed: velocity.dot(right),
         }
     }
+
+    pub fn slip_angle(self) -> f32 {
+        self.lateral_speed
+            .abs()
+            .atan2(self.forward_speed.abs().max(0.001))
+    }
 }
 
 pub fn drive_mode(throttle: f32, forward_speed: f32) -> DriveMode {
@@ -102,6 +127,18 @@ pub fn drive_mode(throttle: f32, forward_speed: f32) -> DriveMode {
         DriveMode::Reverse
     } else {
         DriveMode::Forward
+    }
+}
+
+pub fn handling_state(tuning: &DrivingTuning, basis: &MotionBasis) -> HandlingState {
+    let speed = Vec2::new(basis.forward_speed, basis.lateral_speed).length();
+
+    if speed >= tuning.slide_speed_threshold
+        && basis.slip_angle() >= tuning.slide_slip_angle_threshold
+    {
+        HandlingState::Sliding
+    } else {
+        HandlingState::Grip
     }
 }
 

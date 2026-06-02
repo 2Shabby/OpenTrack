@@ -2,7 +2,7 @@ mod model;
 
 use bevy::prelude::*;
 
-pub use model::{DriveMode, DrivingTuning};
+pub use model::{DriveMode, DrivingTuning, HandlingState};
 
 use crate::physics::{EcsTrackPhysicsQueries, RailCollider, TrackPhysicsQueries};
 use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
@@ -49,7 +49,9 @@ pub struct PlayerCar {
     pub throttle: f32,
     pub steer: f32,
     pub signed_speed: f32,
+    pub slip_angle: f32,
     pub drive_mode: DriveMode,
+    pub handling_state: HandlingState,
 }
 
 impl Default for PlayerCar {
@@ -61,7 +63,9 @@ impl Default for PlayerCar {
             throttle: 0.0,
             steer: 0.0,
             signed_speed: 0.0,
+            slip_angle: 0.0,
             drive_mode: DriveMode::Forward,
+            handling_state: HandlingState::Grip,
         }
     }
 }
@@ -104,7 +108,9 @@ fn drive_car(
         let surface = surfaces.get(car.current_surface);
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
         car.signed_speed = basis.forward_speed;
+        car.slip_angle = basis.slip_angle();
         car.drive_mode = model::drive_mode(controls.throttle, basis.forward_speed);
+        car.handling_state = model::handling_state(&tuning, &basis);
 
         car.yaw += model::steering_yaw_delta(&tuning, &surface, controls, &basis) * dt;
 

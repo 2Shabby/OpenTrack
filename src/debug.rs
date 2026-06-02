@@ -60,7 +60,7 @@ fn update_debug_overlay(
         .unwrap_or_else(|| "none".to_string());
 
     overlay.0 = format!(
-        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
+        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nhandling: {}\nslip: {:>4.0} deg\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
         track.seed,
         track.piece_count,
         track.checkpoint_count,
@@ -81,6 +81,8 @@ fn update_debug_overlay(
         car.velocity.length(),
         car.signed_speed,
         car.drive_mode.label(),
+        car.handling_state.label(),
+        car.slip_angle.to_degrees(),
         car.current_surface.label(),
         car.throttle,
         car.steer,

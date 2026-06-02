@@ -536,6 +536,7 @@ Procedural assembly has started:
 * Rail collision resolves laterally rather than using generic rectangle end-cap normals.
 * The generated track keeps one checkpoint and one finish for the current run-loop contract.
 * Debug overlay shows generated seed, piece count, and actual/expected road/rail/trigger counts.
+* Driving model now reports slip angle and grip/sliding state for drift tuning without changing handling yet.
 
 ## Pending Work
 
@@ -575,7 +576,7 @@ Pending:
 Pending:
 
 * continued tuning of reverse/brake/steering feel
-* explicit drift/slip state in the arcade driving model
+* use the current slip state to drive an explicit drift assist
 * counter-steer and spin-out damping assist tuned for Trackmania-like readability
 * better collision response at high speed
 * visual feedback for surface transitions and boost
