@@ -471,6 +471,8 @@ Procedural assembly has started:
 * Surfaces are assigned by deterministic RNG.
 * Piece yaw is generated with small deterministic deltas to create gentle curve sequences.
 * Surface zones, rail colliders, and checkpoint/finish triggers now use oriented bounds.
+* Track generation now stores explicit entry/exit transforms per piece to keep adjacent pieces and lines aligned.
+* Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
 * The generated track keeps one checkpoint and one finish for the current run-loop contract.
 * Debug overlay shows generated seed and piece count.
 
