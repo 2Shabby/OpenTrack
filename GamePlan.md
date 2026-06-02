@@ -556,6 +556,7 @@ Procedural assembly has started:
 * Car visuals now use separate body and wheel primitives with body roll/pitch, front-wheel steering, and wheel spin.
 * In-run HUD shows driver, timer, checkpoint progress, speed, best time, and ghost time; verbose debug is toggled with F3.
 * Grass field, forest, and rocks are placed relative to generated track bounds instead of fixed world coordinates.
+* Track validation now checks empty tracks, missing finish, short pieces, zero-length segments, connections, and generated counts.
 
 ## Pending Work
 
@@ -578,7 +579,7 @@ Pending:
 * better off-track behavior once border collision is stable
 * checkpoint and finish line placement for every future piece type
 * recipe controls for seed, length, surface mix, and difficulty
-* validation diagnostics for gaps, overlaps, missing rails, missing triggers, and unreachable finish states
+* add overlap and unreachable-finish validation once routes become more complex
 
 ### Vehicle and Feel
 

@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use super::generation::{
     GeneratedTrackInfo, PathFrame, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackBounds,
     TrackPiece, TrackPieceKind, TrackRecipe, TrackSegment, car_spawn_for, generate_track_pieces,
-    validate_piece_connections,
+    validate_track_pieces,
 };
 use super::markers::{
     GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, SpawnedCamera, SpawnedLighting,
@@ -27,8 +27,8 @@ pub fn spawn_generated_track(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let pieces = generate_track_pieces(recipe);
-    if let Err(error) = validate_piece_connections(&pieces) {
-        warn!("generated track connection validation failed: {error}");
+    if let Err(error) = validate_track_pieces(&pieces) {
+        warn!("generated track validation failed: {error}");
     }
     let track_bounds = TrackBounds::from_pieces(&pieces);
     let track_info = GeneratedTrackInfo::from_pieces(recipe, &pieces);

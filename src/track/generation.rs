@@ -214,7 +214,39 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
         .collect()
 }
 
-pub fn validate_piece_connections(pieces: &[TrackPiece]) -> Result<(), String> {
+pub fn validate_track_pieces(pieces: &[TrackPiece]) -> Result<(), String> {
+    if pieces.is_empty() {
+        return Err("track has no pieces".to_string());
+    }
+
+    let finish_count = pieces
+        .iter()
+        .filter(|piece| matches!(piece.kind, TrackPieceKind::Finish))
+        .count();
+    if finish_count != 1 {
+        return Err(format!(
+            "track has {finish_count} finish pieces, expected 1"
+        ));
+    }
+
+    for (index, piece) in pieces.iter().enumerate() {
+        if piece.frames.len() < 2 {
+            return Err(format!(
+                "piece {index} has {} frames, expected at least 2",
+                piece.frames.len()
+            ));
+        }
+
+        for (segment_index, segment) in piece.segments().iter().enumerate() {
+            if segment.length <= 0.001 {
+                return Err(format!(
+                    "piece {index} segment {segment_index} has nonpositive length {:.4}",
+                    segment.length
+                ));
+            }
+        }
+    }
+
     for (index, pair) in pieces.windows(2).enumerate() {
         let previous = &pair[0];
         let next = &pair[1];
@@ -230,6 +262,22 @@ pub fn validate_piece_connections(pieces: &[TrackPiece]) -> Result<(), String> {
                 yaw_delta
             ));
         }
+    }
+
+    let info = GeneratedTrackInfo {
+        seed: 0,
+        piece_count: pieces.len(),
+        checkpoint_count: TrackPiece::checkpoint_count(pieces),
+        road_surface_count: pieces.iter().map(TrackPiece::segment_count).sum(),
+        rail_count: pieces.iter().map(TrackPiece::segment_count).sum::<usize>() * 2,
+        trigger_count: TrackPiece::trigger_count(pieces),
+    };
+
+    if info.road_surface_count == 0 || info.rail_count == 0 || info.trigger_count == 0 {
+        return Err(format!(
+            "invalid generated counts: roads {}, rails {}, triggers {}",
+            info.road_surface_count, info.rail_count, info.trigger_count
+        ));
     }
 
     Ok(())
