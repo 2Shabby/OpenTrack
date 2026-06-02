@@ -5,6 +5,7 @@ mod ghost;
 mod hotseat;
 mod physics;
 mod run;
+mod spatial;
 mod surface;
 mod track;
 

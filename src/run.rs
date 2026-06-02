@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::driving::PlayerCar;
+use crate::spatial::{OrientedRect, Pose2};
 
 pub struct RunPlugin;
 
@@ -66,24 +67,20 @@ pub enum TrackTriggerKind {
 #[derive(Component)]
 pub struct TrackTrigger {
     pub kind: TrackTriggerKind,
-    pub center: Vec2,
-    pub half_extents: Vec2,
-    pub yaw: f32,
+    pub bounds: OrientedRect,
 }
 
 impl TrackTrigger {
-    pub fn contains(&self, position: Vec3) -> bool {
-        let local = rotate_2d(Vec2::new(position.x, position.z) - self.center, -self.yaw);
-        let dx = local.x.abs();
-        let dz = local.y.abs();
-
-        dx <= self.half_extents.x && dz <= self.half_extents.y
+    pub fn new(kind: TrackTriggerKind, pose: Pose2, half_extents: Vec2) -> Self {
+        Self {
+            kind,
+            bounds: OrientedRect::new(pose, half_extents),
+        }
     }
-}
 
-fn rotate_2d(value: Vec2, angle: f32) -> Vec2 {
-    let (sin, cos) = angle.sin_cos();
-    Vec2::new(value.x * cos - value.y * sin, value.x * sin + value.y * cos)
+    pub fn contains(&self, position: Vec3) -> bool {
+        self.bounds.contains_xz(position)
+    }
 }
 
 fn update_run(

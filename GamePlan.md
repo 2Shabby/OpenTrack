@@ -473,6 +473,8 @@ Procedural assembly has started:
 * Surface zones, rail colliders, and checkpoint/finish triggers now use oriented bounds.
 * Track generation now stores explicit entry/exit transforms per piece to keep adjacent pieces and lines aligned.
 * Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
+* Shared spatial types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
+* Surface zones, rail colliders, triggers, and track pieces no longer carry parallel center/yaw/extent conventions.
 * The generated track keeps one checkpoint and one finish for the current run-loop contract.
 * Debug overlay shows generated seed and piece count.
 

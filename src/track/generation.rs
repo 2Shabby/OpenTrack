@@ -3,6 +3,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::driving::CarSpawn;
+use crate::spatial::Pose2;
 use crate::surface::SurfaceKind;
 
 pub const TRACK_WIDTH: f32 = 12.0;
@@ -44,10 +45,9 @@ pub enum TrackPieceKind {
 pub struct TrackPiece {
     pub kind: TrackPieceKind,
     pub surface: SurfaceKind,
-    pub center: Vec3,
-    pub yaw: f32,
-    pub entry: Transform2d,
-    pub exit: Transform2d,
+    pub pose: Pose2,
+    pub entry: Pose2,
+    pub exit: Pose2,
 }
 
 impl TrackPiece {
@@ -63,20 +63,14 @@ impl TrackPiece {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Transform2d {
-    pub position: Vec2,
-    pub yaw: f32,
-}
-
 pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
     let piece_count = recipe.piece_count.max(4);
     let checkpoint_index = piece_count / 2;
     let mut rng = ChaCha8Rng::seed_from_u64(recipe.seed);
-    let mut entry = Transform2d {
-        position: Vec2::new(0.0, -((piece_count as f32) * PIECE_LENGTH * 0.5)),
-        yaw: 0.0,
-    };
+    let mut entry = Pose2::new(
+        Vec2::new(0.0, -((piece_count as f32) * PIECE_LENGTH * 0.5)),
+        0.0,
+    );
 
     (0..piece_count)
         .map(|index| {
@@ -87,10 +81,10 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
             };
             let exit_yaw = (entry.yaw + yaw_delta).clamp(-0.55, 0.55);
             let piece_yaw = average_angle(entry.yaw, exit_yaw);
-            let exit = Transform2d {
-                position: entry.position + forward_2d(piece_yaw) * PIECE_LENGTH,
-                yaw: exit_yaw,
-            };
+            let exit = Pose2::new(
+                entry.position + Pose2::new(Vec2::ZERO, piece_yaw).forward() * PIECE_LENGTH,
+                exit_yaw,
+            );
             let kind = piece_kind(index, piece_count, checkpoint_index, yaw_delta);
             let surface = match kind {
                 TrackPieceKind::Finish => SurfaceKind::Boost,
@@ -99,12 +93,13 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
             let piece = TrackPiece {
                 kind,
                 surface,
-                center: Vec3::new(
-                    (entry.position.x + exit.position.x) * 0.5,
-                    0.0,
-                    (entry.position.y + exit.position.y) * 0.5,
+                pose: Pose2::new(
+                    Vec2::new(
+                        (entry.position.x + exit.position.x) * 0.5,
+                        (entry.position.y + exit.position.y) * 0.5,
+                    ),
+                    piece_yaw,
                 ),
-                yaw: piece_yaw,
                 entry,
                 exit,
             };
@@ -128,16 +123,7 @@ pub fn car_spawn_for(pieces: &[TrackPiece]) -> CarSpawn {
 }
 
 pub fn forward_2d(yaw: f32) -> Vec2 {
-    Vec2::new(yaw.sin(), yaw.cos())
-}
-
-pub fn forward_3d(yaw: f32) -> Vec3 {
-    Vec3::new(yaw.sin(), 0.0, yaw.cos())
-}
-
-pub fn rotate_2d(value: Vec2, angle: f32) -> Vec2 {
-    let (sin, cos) = angle.sin_cos();
-    Vec2::new(value.x * cos - value.y * sin, value.x * sin + value.y * cos)
+    Pose2::new(Vec2::ZERO, yaw).forward()
 }
 
 fn piece_kind(

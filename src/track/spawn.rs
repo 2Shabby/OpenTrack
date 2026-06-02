@@ -2,13 +2,14 @@ use bevy::prelude::*;
 
 use super::generation::{
     GeneratedTrackInfo, PIECE_LENGTH, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece,
-    TrackPieceKind, TrackRecipe, car_spawn_for, forward_3d, generate_track_pieces, rotate_2d,
+    TrackPieceKind, TrackRecipe, car_spawn_for, generate_track_pieces,
 };
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::sports_car_mesh;
 use crate::driving::{CarSpawn, ChaseCamera, PlayerCar};
 use crate::physics::RailCollider;
 use crate::run::{TrackTrigger, TrackTriggerKind};
+use crate::spatial::{OrientedRect, Pose2, forward_3d};
 use crate::surface::{SurfaceKind, SurfaceZone};
 
 pub fn spawn_generated_track(
@@ -54,13 +55,8 @@ fn spawn_piece(
             perceptual_roughness: 0.92,
             ..default()
         })),
-        Transform::from_translation(piece.center).with_rotation(Quat::from_rotation_y(piece.yaw)),
-        SurfaceZone {
-            kind: piece.surface,
-            center: Vec2::new(piece.center.x, piece.center.z),
-            half_extents: piece.bounds(),
-            yaw: piece.yaw,
-        },
+        piece.pose.transform(),
+        SurfaceZone::new(piece.surface, piece.pose, piece.bounds()),
     ));
 
     spawn_rails(commands, meshes, materials, piece);
@@ -81,17 +77,22 @@ fn spawn_rails(
 
     for side in [-1.0, 1.0] {
         let local = Vec2::new(side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5), 0.0);
-        let center = Vec2::new(piece.center.x, piece.center.z) + rotate_2d(local, piece.yaw);
+        let rail_pose = Pose2::new(piece.pose.local_to_world(local), piece.pose.yaw);
 
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, PIECE_LENGTH))),
             MeshMaterial3d(rail_material.clone()),
-            Transform::from_xyz(center.x, RAIL_HEIGHT * 0.5, center.y)
-                .with_rotation(Quat::from_rotation_y(piece.yaw)),
+            Transform::from_xyz(
+                rail_pose.position.x,
+                RAIL_HEIGHT * 0.5,
+                rail_pose.position.y,
+            )
+            .with_rotation(Quat::from_rotation_y(piece.pose.yaw)),
             RailCollider {
-                center,
-                half_extents: Vec2::new(RAIL_THICKNESS * 0.5, PIECE_LENGTH * 0.5),
-                yaw: piece.yaw,
+                bounds: OrientedRect::new(
+                    rail_pose,
+                    Vec2::new(RAIL_THICKNESS * 0.5, PIECE_LENGTH * 0.5),
+                ),
             },
         ));
     }
@@ -108,7 +109,6 @@ fn spawn_trigger(
     };
 
     let half_extents = Vec2::new(TRACK_WIDTH * 0.5, 0.45);
-    let center = line.position;
 
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(
@@ -121,14 +121,9 @@ fn spawn_trigger(
             emissive: color.into(),
             ..default()
         })),
-        Transform::from_xyz(center.x, 0.04, center.y)
+        Transform::from_xyz(line.position.x, 0.04, line.position.y)
             .with_rotation(Quat::from_rotation_y(line.yaw)),
-        TrackTrigger {
-            kind,
-            center,
-            half_extents,
-            yaw: line.yaw,
-        },
+        TrackTrigger::new(kind, line, half_extents),
     ));
 }
 
@@ -174,9 +169,7 @@ fn spawn_camera(commands: &mut Commands, car_spawn: CarSpawn) {
     ));
 }
 
-fn trigger_for_piece(
-    piece: TrackPiece,
-) -> Option<(TrackTriggerKind, Color, super::generation::Transform2d)> {
+fn trigger_for_piece(piece: TrackPiece) -> Option<(TrackTriggerKind, Color, Pose2)> {
     match piece.kind {
         TrackPieceKind::Straight | TrackPieceKind::Curve => None,
         TrackPieceKind::Checkpoint(index) => Some((
