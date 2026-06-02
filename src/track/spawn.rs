@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 
 use super::generation::{
-    GeneratedTrackInfo, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece, TrackPieceKind,
-    TrackRecipe, car_spawn_for, generate_track_pieces, validate_piece_connections,
+    GeneratedTrackInfo, PathFrame, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece,
+    TrackPieceKind, TrackRecipe, TrackSegment, car_spawn_for, generate_track_pieces,
+    validate_piece_connections,
 };
 use super::markers::{
     GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, SpawnedCamera, SpawnedLighting,
@@ -59,52 +60,53 @@ fn spawn_piece(
     materials: &mut Assets<StandardMaterial>,
     piece: &TrackPiece,
 ) {
-    commands.spawn((
-        Mesh3d(meshes.add(road_surface_mesh(&piece.frames, TRACK_WIDTH))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: surface_color(piece.surface),
-            perceptual_roughness: 0.92,
-            ..default()
-        })),
-        Transform::default(),
-        SpawnedSceneEntity,
-    ));
-
-    spawn_surface_zones(commands, piece);
-    spawn_rails(commands, meshes, materials, piece);
-    spawn_trigger(commands, meshes, materials, piece);
-}
-
-fn spawn_surface_zones(commands: &mut Commands, piece: &TrackPiece) {
-    for segment in piece.segments() {
-        commands.spawn((
-            SurfaceZone::new(
-                piece.surface,
-                segment.pose,
-                Vec2::new(TRACK_WIDTH * 0.5, segment.length * 0.5),
-            ),
-            GeneratedRoadSurface,
-            SpawnedSceneEntity,
-        ));
-    }
-}
-
-fn spawn_rails(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    piece: &TrackPiece,
-) {
+    let road_material = materials.add(StandardMaterial {
+        base_color: surface_color(piece.surface),
+        perceptual_roughness: 0.92,
+        ..default()
+    });
     let rail_material = materials.add(StandardMaterial {
         base_color: Color::srgb(0.11, 0.12, 0.12),
         perceptual_roughness: 0.7,
         ..default()
     });
 
-    for segment in piece.segments() {
+    for (frames, segment) in piece.frames.windows(2).zip(piece.segments()) {
+        spawn_track_segment(
+            commands,
+            meshes,
+            piece.surface,
+            [frames[0], frames[1]],
+            segment,
+            road_material.clone(),
+            rail_material.clone(),
+        );
+    }
+
+    spawn_trigger(commands, meshes, materials, piece);
+}
+
+fn spawn_track_segment(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    surface: SurfaceKind,
+    frames: [PathFrame; 2],
+    segment: TrackSegment,
+    road_material: Handle<StandardMaterial>,
+    rail_material: Handle<StandardMaterial>,
+) {
+    commands.spawn((
+        Mesh3d(meshes.add(road_surface_mesh(&frames, TRACK_WIDTH))),
+        MeshMaterial3d(road_material),
+        Transform::default(),
+        SurfaceZone::new(surface, segment.pose, segment.road_half_extents()),
+        GeneratedRoadSurface,
+        SpawnedSceneEntity,
+    ));
+
+    if segment.has_rails {
         for side in [-1.0, 1.0] {
-            let local = Vec2::new(side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5), 0.0);
-            let rail_pose = Pose2::new(segment.pose.local_to_world(local), segment.pose.yaw);
+            let rail_pose = segment.rail_pose(side);
 
             commands.spawn((
                 Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, segment.length))),
@@ -116,10 +118,7 @@ fn spawn_rails(
                 )
                 .with_rotation(Quat::from_rotation_y(segment.pose.yaw)),
                 RailCollider {
-                    bounds: OrientedRect::new(
-                        rail_pose,
-                        Vec2::new(RAIL_THICKNESS * 0.5, segment.length * 0.5),
-                    ),
+                    bounds: OrientedRect::new(rail_pose, segment.rail_half_extents()),
                 },
                 GeneratedRail,
                 SpawnedSceneEntity,

@@ -535,6 +535,7 @@ Procedural assembly has started:
 * Road surface visuals are generated as meshes from path frames instead of spawned as rotated plane primitives.
 * Generated tracks now include deterministic sampled arc curves.
 * Road surface zones and rails are generated per sampled path segment, not per whole piece rectangle.
+* Each path segment now owns road surface bounds and optional rail bounds from one primitive.
 * Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
 * Generated scene entities are tagged by semantic role: environment, scenery, road surface, rail, trigger, player, camera, and lighting.
 * Shared spatial types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
@@ -570,6 +571,7 @@ This is the next sensible phase before adding more track complexity, because run
 Pending:
 
 * a real piece-library contract for visuals, road surface zones, rails, triggers, and colliders
+* move more per-segment spawning into reusable piece-library data
 * expand generated piece sequences beyond simple straight/arc choices
 * improve curve piece variety and validation
 * better off-track behavior once border collision is stable

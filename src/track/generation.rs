@@ -72,6 +72,22 @@ pub struct PathFrame {
 pub struct TrackSegment {
     pub pose: Pose2,
     pub length: f32,
+    pub has_rails: bool,
+}
+
+impl TrackSegment {
+    pub fn road_half_extents(self) -> Vec2 {
+        Vec2::new(TRACK_WIDTH * 0.5, self.length * 0.5)
+    }
+
+    pub fn rail_pose(self, side: f32) -> Pose2 {
+        let local = Vec2::new(side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5), 0.0);
+        Pose2::new(self.pose.local_to_world(local), self.pose.yaw)
+    }
+
+    pub fn rail_half_extents(self) -> Vec2 {
+        Vec2::new(RAIL_THICKNESS * 0.5, self.length * 0.5)
+    }
 }
 
 impl TrackPiece {
@@ -101,6 +117,7 @@ impl TrackPiece {
                         mid_yaw(entry.yaw, exit.yaw),
                     ),
                     length: entry.position.distance(exit.position),
+                    has_rails: true,
                 }
             })
             .collect()
