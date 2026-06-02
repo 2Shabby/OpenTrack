@@ -315,6 +315,30 @@ then latest run order
 
 Leaderboards are per track recipe, seed, and generator version.
 
+## App Flow and Screens
+
+The first playable shell should be simple and local-first.
+
+Required screens:
+
+* main menu
+* track recipe/seed selection
+* hotseat player setup
+* car color selection
+* in-run HUD
+* pause menu
+* post-run results
+* leaderboard/results screen
+
+Initial screen behavior:
+
+* main menu starts a local hotseat session or quits
+* setup screens collect player names, car colors, recipe length, and seed
+* pause menu can resume, restart current run, return to setup/menu, or quit
+* post-run screen shows finish time, checkpoint progress, current leaderboard, and next-player/retry actions
+
+Keep save-game mechanics out of scope. Menus may keep session state in memory only.
+
 ## Camera
 
 Camera is part of the driving feel.
@@ -447,20 +471,28 @@ Implemented systems:
 * Session timer, checkpoint progress, restart, hotseat players, in-memory leaderboard, and session-only ghost replay.
 * Realistic sports-car mesh from `~/Downloads/Realistic Car Pack - Nov 2018.zip`.
 * Off-track grass/forest scenery using textures from `~/Downloads/LowpolyForestPack.zip`.
-* Debug overlay for seed, pieces, player state, run state, speed, signed speed, drive mode, surface, and tuning values.
+* Debug overlay for seed, pieces, generated entity counts, player state, run state, speed, signed speed, drive mode, surface, and tuning values.
 
 Current constraints:
 
 * No save-game mechanics, persisted best times, player profiles, or shared-track storage.
 * Forest FBX files are not loaded directly; scenery uses generated low-poly geometry with the pack textures.
 * Generated tracks are currently straight piece chains only.
+* No app state shell yet: gameplay starts directly at the driving sandbox.
+* No main menu, pause menu, setup screens, car color selection, or results screen yet.
 
 Next code changes:
 
-* Expand procedural assembly from fixed straight chain to generated piece sequences.
-* Add simple curve pieces with matching collision/trigger bounds.
-* Add recipe controls for length, surface mix, and seed.
-* Split tuning values into editable resources or RON assets once values settle.
+1. Add Bevy app states for `MainMenu`, `Setup`, `Driving`, `Paused`, and `Results`.
+2. Move direct startup spawning behind state transitions so a session can be created, torn down, and recreated cleanly.
+3. Add basic main menu and hotseat setup screen.
+4. Add recipe/seed/length selection.
+5. Add car color selection using the existing sports-car mesh.
+6. Add pause menu with resume, restart, setup/menu, and quit actions.
+7. Add post-run/results screen with leaderboard and next-player/retry actions.
+8. Expand procedural assembly from fixed straight chain to generated piece sequences.
+9. Add simple curve pieces only after curved road visuals and colliders share one geometry contract.
+10. Split tuning values into editable resources or RON assets once values settle.
 
 ## Current Code Slice
 
@@ -472,16 +504,83 @@ Procedural assembly has started:
 * Surface zones, rail colliders, and checkpoint/finish triggers now use oriented bounds.
 * Track generation now stores explicit entry/exit transforms per piece to keep adjacent pieces and lines aligned.
 * Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
+* Generated scene entities are tagged by semantic role: environment, scenery, road surface, rail, trigger, player, camera, and lighting.
 * Shared spatial types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
 * Surface zones, rail colliders, triggers, and track pieces no longer carry parallel center/yaw/extent conventions.
 * Physics query results, hotseat state, ghost samples, and car reset semantics have been narrowed to the minimum current API.
 * Generated tracks intentionally use straight modules only until real curved road geometry/colliders are implemented.
+* Rail collision resolves laterally rather than using generic rectangle end-cap normals.
 * The generated track keeps one checkpoint and one finish for the current run-loop contract.
-* Debug overlay shows generated seed and piece count.
+* Debug overlay shows generated seed, piece count, and actual/expected road/rail/trigger counts.
+
+## Pending Work
+
+### Product Shell
+
+Pending:
+
+* app state machine
+* main menu
+* hotseat player setup screen
+* track recipe/seed/length selection screen
+* car color selection screen
+* pause menu
+* post-run/results screen
+* in-memory leaderboard view
+* clean scene teardown/rebuild between sessions
+
+This is the next sensible phase before adding more track complexity, because runtime track changes and setup screens both need explicit scene ownership and state transitions.
+
+### Gameplay and Track
+
+Pending:
+
+* generated piece sequences beyond a fixed straight chain
+* a real piece-library contract for visuals, road surface zones, rails, triggers, and colliders
+* curve pieces with geometry and collision generated from the same data
+* better off-track behavior once border collision is stable
+* checkpoint and finish line placement for every future piece type
+* recipe controls for seed, length, surface mix, and difficulty
+* validation diagnostics for gaps, overlaps, missing rails, missing triggers, and unreachable finish states
+
+### Vehicle and Feel
+
+Pending:
+
+* continued tuning of reverse/brake/steering feel
+* better collision response at high speed
+* visual feedback for surface transitions and boost
+* optional controller support once keyboard feel stabilizes
+
+### UI/HUD
+
+Pending:
+
+* replace the debug overlay with a proper in-run HUD
+* show timer, checkpoint progress, current player, best time, and ghost status
+* keep debug/tuning data behind a debug toggle
+
+### Assets and Presentation
+
+Pending:
+
+* support multiple car colors from the same mesh
+* improve track visuals beyond flat planes and cuboid rails
+* place forest scenery relative to generated track bounds instead of fixed coordinates
+* add simple audio feedback after the core loop is stable
+
+### Persistence
+
+Out of scope for now:
+
+* saved tracks
+* saved profiles
+* persisted leaderboards
+* replay file export/import
 
 ## Milestones
 
-### 1. Driving Sandbox
+### 1. Driving Sandbox — Mostly Complete
 
 One car, flat plane, fixed timestep, steering, throttle, brake, camera, reset.
 
@@ -491,7 +590,7 @@ Success condition:
 The car is controllable and fun enough to keep testing.
 ```
 
-### 2. Surface Handling
+### 2. Surface Handling — Prototype Complete
 
 Asphalt, dirt, ice, boost, with debug tuning.
 
@@ -501,7 +600,7 @@ Success condition:
 Each surface changes driving lines clearly.
 ```
 
-### 3. Track Pieces
+### 3. Track Pieces — In Progress
 
 Basic pieces connected in code/data: straight, curve, slope, ramp/drop, checkpoint, finish.
 
@@ -511,7 +610,7 @@ Success condition:
 A complete piece-chain run is possible before procedural generation exists.
 ```
 
-### 4. Complete Run
+### 4. Complete Run — Prototype Complete
 
 Timer, checkpoints, finish, restart flow.
 
@@ -521,7 +620,7 @@ Success condition:
 A full run can be completed, timed, and retried.
 ```
 
-### 5. Hotseat
+### 5. Hotseat — Prototype Complete, UI Pending
 
 Player list, turn order, leaderboard.
 
@@ -531,7 +630,7 @@ Success condition:
 Many players can take turns on the same track.
 ```
 
-### 6. Ghosts
+### 6. Ghosts — Prototype Complete, UI Pending
 
 Sampled transform replay for best/previous runs.
 
@@ -541,7 +640,7 @@ Success condition:
 Players can chase visible previous runs.
 ```
 
-### 7. Procedural Assembly
+### 7. Procedural Assembly — In Progress
 
 Generate complete tracks from recipe + seed + piece library.
 
@@ -549,6 +648,16 @@ Success condition:
 
 ```text
 Generated tracks are playable, repeatable, and fun enough to retry.
+```
+
+### 8. Product Shell — Pending
+
+Main menu, setup, pause, results, and leaderboard screens.
+
+Success condition:
+
+```text
+A local session can be configured, played, paused, completed, and repeated without debug-key workflows.
 ```
 
 ## Main Risks
