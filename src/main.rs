@@ -1,10 +1,12 @@
 mod debug;
 mod driving;
+mod run;
 mod surface;
 
 use bevy::prelude::*;
 use debug::DebugPlugin;
 use driving::{CAR_START, DrivingPlugin, PlayerCar};
+use run::{RunPlugin, TrackTrigger, TrackTriggerKind};
 use surface::{SurfaceKind, SurfacePlugin, SurfaceZone};
 
 fn main() {
@@ -18,7 +20,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins((SurfacePlugin, DrivingPlugin, DebugPlugin))
+        .add_plugins((SurfacePlugin, DrivingPlugin, RunPlugin, DebugPlugin))
         .add_systems(Startup, setup_sandbox)
         .run();
 }
@@ -68,6 +70,22 @@ fn setup_sandbox(
         18.0,
         Color::srgb(0.95, 0.67, 0.12),
     );
+    spawn_track_trigger(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        TrackTriggerKind::Checkpoint(0),
+        -2.0,
+        Color::srgb(0.15, 0.48, 1.0),
+    );
+    spawn_track_trigger(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        TrackTriggerKind::Finish,
+        22.0,
+        Color::srgb(1.0, 1.0, 1.0),
+    );
 
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(1.35, 0.55, 2.2))),
@@ -92,6 +110,36 @@ fn setup_sandbox(
         Camera3d::default(),
         Transform::from_xyz(0.0, 6.5, -22.0).looking_at(CAR_START, Vec3::Y),
         driving::ChaseCamera,
+    ));
+}
+
+fn spawn_track_trigger(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    kind: TrackTriggerKind,
+    z: f32,
+    color: Color,
+) {
+    let half_extents = Vec2::new(24.0, 0.45);
+
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(
+            half_extents.x * 2.0,
+            0.08,
+            half_extents.y * 2.0,
+        ))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: color,
+            emissive: color.into(),
+            ..default()
+        })),
+        Transform::from_xyz(0.0, 0.04, z),
+        TrackTrigger {
+            kind,
+            center: Vec2::new(0.0, z),
+            half_extents,
+        },
     ));
 }
 

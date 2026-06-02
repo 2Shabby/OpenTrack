@@ -1,0 +1,121 @@
+use bevy::prelude::*;
+
+use crate::driving::PlayerCar;
+
+pub struct RunPlugin;
+
+impl Plugin for RunPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(RunState::new(1))
+            .add_systems(FixedUpdate, update_run);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RunStatus {
+    Waiting,
+    Running,
+    Finished,
+}
+
+#[derive(Resource, Debug)]
+pub struct RunState {
+    pub status: RunStatus,
+    pub elapsed: f32,
+    pub next_checkpoint: usize,
+    pub checkpoint_count: usize,
+    pub checkpoint_splits: Vec<f32>,
+}
+
+impl RunState {
+    pub fn new(checkpoint_count: usize) -> Self {
+        Self {
+            status: RunStatus::Waiting,
+            elapsed: 0.0,
+            next_checkpoint: 0,
+            checkpoint_count,
+            checkpoint_splits: Vec::with_capacity(checkpoint_count),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.status = RunStatus::Waiting;
+        self.elapsed = 0.0;
+        self.next_checkpoint = 0;
+        self.checkpoint_splits.clear();
+    }
+
+    pub fn status_label(&self) -> &'static str {
+        match self.status {
+            RunStatus::Waiting => "waiting",
+            RunStatus::Running => "running",
+            RunStatus::Finished => "finished",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TrackTriggerKind {
+    Checkpoint(usize),
+    Finish,
+}
+
+#[derive(Component)]
+pub struct TrackTrigger {
+    pub kind: TrackTriggerKind,
+    pub center: Vec2,
+    pub half_extents: Vec2,
+}
+
+impl TrackTrigger {
+    pub fn contains(&self, position: Vec3) -> bool {
+        let dx = (position.x - self.center.x).abs();
+        let dz = (position.z - self.center.y).abs();
+
+        dx <= self.half_extents.x && dz <= self.half_extents.y
+    }
+}
+
+fn update_run(
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    car: Single<(&Transform, &PlayerCar)>,
+    triggers: Query<&TrackTrigger>,
+    mut run: ResMut<RunState>,
+) {
+    if keys.just_pressed(KeyCode::KeyR) {
+        run.reset();
+        return;
+    }
+
+    let (transform, car) = *car;
+
+    if run.status == RunStatus::Waiting && (car.throttle.abs() > 0.0 || car.velocity.length() > 0.2)
+    {
+        run.status = RunStatus::Running;
+    }
+
+    if run.status != RunStatus::Running {
+        return;
+    }
+
+    run.elapsed += time.delta_secs();
+    let elapsed = run.elapsed;
+
+    for trigger in &triggers {
+        if !trigger.contains(transform.translation) {
+            continue;
+        }
+
+        match trigger.kind {
+            TrackTriggerKind::Checkpoint(index) if index == run.next_checkpoint => {
+                run.checkpoint_splits.push(elapsed);
+                run.next_checkpoint += 1;
+            }
+            TrackTriggerKind::Finish if run.next_checkpoint >= run.checkpoint_count => {
+                run.status = RunStatus::Finished;
+            }
+            _ => {}
+        }
+    }
+}

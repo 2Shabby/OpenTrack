@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::driving::PlayerCar;
+use crate::run::RunState;
 use crate::surface::SurfaceLibrary;
 
 pub struct DebugPlugin;
@@ -35,13 +36,18 @@ fn spawn_debug_overlay(mut commands: Commands) {
 
 fn update_debug_overlay(
     car: Single<&PlayerCar>,
+    run: Res<RunState>,
     surfaces: Res<SurfaceLibrary>,
     mut overlay: Single<&mut Text, With<DebugOverlay>>,
 ) {
     let params = surfaces.get(car.current_surface);
 
     overlay.0 = format!(
-        "speed: {:>5.1}\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
+        "time: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
+        run.elapsed,
+        run.status_label(),
+        run.next_checkpoint,
+        run.checkpoint_count,
         car.velocity.length(),
         car.current_surface.label(),
         car.throttle,

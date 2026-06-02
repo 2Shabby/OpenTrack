@@ -453,7 +453,6 @@ R                 reset car
 
 Next code changes after this slice:
 
-* Add simple checkpoint/finish triggers to support complete timed runs.
 * Split debug tuning values into editable resources or RON assets once values settle.
 * Start replacing primitive planes with authored modular track pieces.
 * Add a `physics` abstraction module before any Avian-specific gameplay code is written.
@@ -468,6 +467,18 @@ Milestone 2 has started:
 * simple Bevy UI debug overlay added in `src/debug.rs`
 * asphalt, dirt, ice, slowdown, and boost strips added to the sandbox
 * A/D steering corrected from the first playtest feedback
+
+## Third Code Slice
+
+Milestone 4 has a first session-only pass:
+
+* `src/run.rs` tracks waiting/running/finished run state
+* run timer starts when the car begins moving
+* `R` resets car and run state
+* one checkpoint trigger and one finish trigger are spawned in the sandbox
+* finish requires checkpoint progress first
+
+This deliberately does not add save-game mechanics, persisted best times, or shared tracks.
 
 ## Milestones
 
