@@ -9,6 +9,8 @@ use crate::physics::{EcsTrackPhysicsQueries, RailCollider, TrackPhysicsQueries};
 use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
 
 const DEFAULT_CAR_START: Vec3 = Vec3::new(0.0, 0.05, -26.0);
+const WHEEL_SAMPLE_HALF_WIDTH: f32 = 0.82;
+const WHEEL_SAMPLE_HALF_LENGTH: f32 = 1.72;
 
 #[derive(Clone, Copy, Resource)]
 pub struct CarSpawn {
@@ -75,6 +77,7 @@ pub struct PlayerCar {
     pub slip_angle: f32,
     pub drive_mode: DriveMode,
     pub handling_state: HandlingState,
+    pub wheel_contacts: WheelContacts,
 }
 
 impl Default for PlayerCar {
@@ -89,6 +92,7 @@ impl Default for PlayerCar {
             slip_angle: 0.0,
             drive_mode: DriveMode::Forward,
             handling_state: HandlingState::Grip,
+            wheel_contacts: WheelContacts::default(),
         }
     }
 }
@@ -104,6 +108,37 @@ impl PlayerCar {
 
 #[derive(Component)]
 pub struct ChaseCamera;
+
+#[derive(Clone, Copy)]
+pub struct WheelContacts {
+    pub front_left: SurfaceKind,
+    pub front_right: SurfaceKind,
+    pub rear_left: SurfaceKind,
+    pub rear_right: SurfaceKind,
+}
+
+impl Default for WheelContacts {
+    fn default() -> Self {
+        Self {
+            front_left: SurfaceKind::Asphalt,
+            front_right: SurfaceKind::Asphalt,
+            rear_left: SurfaceKind::Asphalt,
+            rear_right: SurfaceKind::Asphalt,
+        }
+    }
+}
+
+impl WheelContacts {
+    pub fn summary(self) -> String {
+        format!(
+            "FL:{} FR:{} RL:{} RR:{}",
+            self.front_left.label(),
+            self.front_right.label(),
+            self.rear_left.label(),
+            self.rear_right.label()
+        )
+    }
+}
 
 fn drive_car(
     time: Res<Time>,
@@ -130,6 +165,7 @@ fn drive_car(
 
         let surface = surfaces.get(car.current_surface);
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
+        car.wheel_contacts = sample_wheel_contacts(&physics, transform.translation, &basis);
         car.signed_speed = basis.forward_speed;
         car.slip_angle = basis.slip_angle();
         car.drive_mode = model::drive_mode(controls.throttle, basis.forward_speed);
@@ -168,6 +204,24 @@ fn drive_car(
         next_translation.y = car_spawn.translation.y;
         transform.translation = next_translation;
         transform.rotation = Quat::from_rotation_y(car.yaw);
+    }
+}
+
+fn sample_wheel_contacts(
+    physics: &impl TrackPhysicsQueries,
+    center: Vec3,
+    basis: &model::MotionBasis,
+) -> WheelContacts {
+    let front = basis.forward * WHEEL_SAMPLE_HALF_LENGTH;
+    let rear = -basis.forward * WHEEL_SAMPLE_HALF_LENGTH;
+    let left = -basis.right * WHEEL_SAMPLE_HALF_WIDTH;
+    let right = basis.right * WHEEL_SAMPLE_HALF_WIDTH;
+
+    WheelContacts {
+        front_left: physics.surface_at(center + front + left),
+        front_right: physics.surface_at(center + front + right),
+        rear_left: physics.surface_at(center + rear + left),
+        rear_right: physics.surface_at(center + rear + right),
     }
 }
 
