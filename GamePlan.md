@@ -448,6 +448,8 @@ S / ArrowDown     brake/reverse
 A / ArrowLeft     steer left
 D / ArrowRight    steer right
 R                 reset car
+P                 add local hotseat player while waiting
+N                 next hotseat player after finish
 ```
 
 Next code changes after this slice:
@@ -497,6 +499,18 @@ The physics-query boundary now exists:
 * the initial implementation queries ECS `SurfaceZone` components
 * driving asks the physics layer for current surface instead of calling surface lookup directly
 * car shape casting is intentionally stubbed until wall/floor collision work starts
+
+## Sixth Code Slice
+
+Milestone 5 has a first local-only pass:
+
+* `src/hotseat.rs` tracks session players, active player, and an in-memory leaderboard
+* finished runs are recorded once and sorted by finish time
+* `N` advances to the next player after a finished run
+* `P` adds another local player while the run is waiting
+* debug overlay shows active player, player count, and session best
+
+No player profiles, save files, or persistent leaderboard storage are included.
 
 ## Milestones
 

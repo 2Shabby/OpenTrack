@@ -25,6 +25,7 @@ pub struct RunState {
     pub next_checkpoint: usize,
     pub checkpoint_count: usize,
     pub checkpoint_splits: Vec<f32>,
+    pub finish_recorded: bool,
 }
 
 impl RunState {
@@ -35,14 +36,16 @@ impl RunState {
             next_checkpoint: 0,
             checkpoint_count,
             checkpoint_splits: Vec::with_capacity(checkpoint_count),
+            finish_recorded: false,
         }
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.status = RunStatus::Waiting;
         self.elapsed = 0.0;
         self.next_checkpoint = 0;
         self.checkpoint_splits.clear();
+        self.finish_recorded = false;
     }
 
     pub fn status_label(&self) -> &'static str {

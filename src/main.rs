@@ -1,5 +1,6 @@
 mod debug;
 mod driving;
+mod hotseat;
 mod physics;
 mod run;
 mod surface;
@@ -8,6 +9,7 @@ mod track;
 use bevy::prelude::*;
 use debug::DebugPlugin;
 use driving::DrivingPlugin;
+use hotseat::HotseatPlugin;
 use physics::PhysicsQueriesPlugin;
 use run::RunPlugin;
 use surface::SurfacePlugin;
@@ -30,6 +32,7 @@ fn main() {
             TrackPlugin,
             DrivingPlugin,
             RunPlugin,
+            HotseatPlugin,
             DebugPlugin,
         ))
         .add_systems(Startup, spawn_sandbox_track)
