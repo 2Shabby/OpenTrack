@@ -5,15 +5,19 @@ mod scenery;
 mod spawn;
 
 pub use generation::{GeneratedTrackInfo, TrackRecipe};
-pub use markers::{GeneratedRail, GeneratedRoadSurface, GeneratedTrigger};
+pub use markers::{GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, SpawnedSceneEntity};
 
 use bevy::prelude::*;
+
+use crate::game_state::GameState;
 
 pub struct TrackPlugin;
 
 impl Plugin for TrackPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(TrackRecipe::default());
+        app.insert_resource(TrackRecipe::default())
+            .add_systems(OnEnter(GameState::Driving), spawn_sandbox_track)
+            .add_systems(OnExit(GameState::Driving), despawn_spawned_scene);
     }
 }
 
@@ -25,4 +29,13 @@ pub fn spawn_sandbox_track(
     materials: ResMut<Assets<StandardMaterial>>,
 ) {
     spawn::spawn_generated_track(commands, &recipe, &asset_server, meshes, materials);
+}
+
+fn despawn_spawned_scene(
+    mut commands: Commands,
+    entities: Query<Entity, With<SpawnedSceneEntity>>,
+) {
+    for entity in &entities {
+        commands.entity(entity).despawn();
+    }
 }

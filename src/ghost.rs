@@ -2,7 +2,9 @@ use bevy::prelude::*;
 
 use crate::car_asset::sports_car_mesh;
 use crate::driving::PlayerCar;
+use crate::game_state::GameState;
 use crate::run::{RunState, RunStatus};
+use crate::track::SpawnedSceneEntity;
 
 const GHOST_SAMPLE_INTERVAL: f32 = 1.0 / 20.0;
 
@@ -12,7 +14,7 @@ impl Plugin for GhostPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GhostRecorder::default())
             .insert_resource(SessionBestGhost::default())
-            .add_systems(Startup, spawn_ghost_visual)
+            .add_systems(OnEnter(GameState::Driving), spawn_ghost_visual)
             .add_systems(
                 Update,
                 (
@@ -20,7 +22,8 @@ impl Plugin for GhostPlugin {
                     record_ghost_samples,
                     save_finished_ghost,
                     update_ghost_visual,
-                ),
+                )
+                    .run_if(in_state(GameState::Driving)),
             );
     }
 }
@@ -75,6 +78,7 @@ fn spawn_ghost_visual(
         Transform::from_xyz(0.0, -10.0, 0.0),
         Visibility::Hidden,
         GhostVisual,
+        SpawnedSceneEntity,
     ));
 }
 

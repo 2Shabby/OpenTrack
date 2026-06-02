@@ -1,14 +1,17 @@
 use bevy::prelude::*;
 
 use crate::driving::{CarSpawn, PlayerCar};
+use crate::game_state::GameState;
 use crate::run::{RunState, RunStatus};
 
 pub struct HotseatPlugin;
 
 impl Plugin for HotseatPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(HotseatSession::default())
-            .add_systems(Update, (record_finished_run, hotseat_controls));
+        app.insert_resource(HotseatSession::default()).add_systems(
+            Update,
+            (record_finished_run, hotseat_controls).run_if(in_state(GameState::Driving)),
+        );
     }
 }
 

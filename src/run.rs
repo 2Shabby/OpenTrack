@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::driving::PlayerCar;
+use crate::game_state::GameState;
 use crate::spatial::{OrientedRect, Pose2};
 
 pub struct RunPlugin;
@@ -8,7 +9,7 @@ pub struct RunPlugin;
 impl Plugin for RunPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(RunState::new(1))
-            .add_systems(FixedUpdate, update_run);
+            .add_systems(FixedUpdate, update_run.run_if(in_state(GameState::Driving)));
     }
 }
 

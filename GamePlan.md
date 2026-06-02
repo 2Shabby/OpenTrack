@@ -543,6 +543,8 @@ Procedural assembly has started:
 * The generated track keeps one checkpoint and one finish for the current run-loop contract.
 * Debug overlay shows generated seed, piece count, and actual/expected road/rail/trigger counts.
 * Driving model now reports slip angle and grip/sliding state for drift tuning without changing handling yet.
+* App now starts at a basic main menu and enters gameplay through one `MainMenu -> Driving` state transition.
+* Track/session spawning now happens on entering `Driving`; generated scene cleanup is state-owned.
 
 ## Pending Work
 
@@ -550,15 +552,13 @@ Procedural assembly has started:
 
 Pending:
 
-* app state machine
-* main menu
+* pause state/menu that preserves the active driving scene
 * hotseat player setup screen
 * track recipe/seed/length selection screen
 * car color selection screen
-* pause menu
 * post-run/results screen
 * in-memory leaderboard view
-* clean scene teardown/rebuild between sessions
+* richer scene teardown/rebuild flows from setup/results back into driving
 
 This is the next sensible phase before adding more track complexity, because runtime track changes and setup screens both need explicit scene ownership and state transitions.
 

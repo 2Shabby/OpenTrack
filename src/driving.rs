@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 pub use model::{DriveMode, DrivingTuning, HandlingState};
 
+use crate::game_state::GameState;
 use crate::physics::{EcsTrackPhysicsQueries, RailCollider, TrackPhysicsQueries};
 use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
 
@@ -36,8 +37,13 @@ impl Plugin for DrivingPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(DrivingTuning::default())
             .insert_resource(CarSpawn::default())
-            .add_systems(FixedUpdate, drive_car)
-            .add_systems(Update, chase_camera.after(drive_car));
+            .add_systems(FixedUpdate, drive_car.run_if(in_state(GameState::Driving)))
+            .add_systems(
+                Update,
+                chase_camera
+                    .after(drive_car)
+                    .run_if(in_state(GameState::Driving)),
+            );
     }
 }
 

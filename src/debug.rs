@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::driving::PlayerCar;
+use crate::game_state::GameState;
 use crate::ghost::SessionBestGhost;
 use crate::hotseat::HotseatSession;
 use crate::run::RunState;
@@ -11,8 +12,12 @@ pub struct DebugPlugin;
 
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_debug_overlay)
-            .add_systems(Update, update_debug_overlay);
+        app.add_systems(OnEnter(GameState::Driving), spawn_debug_overlay)
+            .add_systems(
+                Update,
+                update_debug_overlay.run_if(in_state(GameState::Driving)),
+            )
+            .add_systems(OnExit(GameState::Driving), despawn_debug_overlay);
     }
 }
 
@@ -35,6 +40,12 @@ fn spawn_debug_overlay(mut commands: Commands) {
         },
         DebugOverlay,
     ));
+}
+
+fn despawn_debug_overlay(mut commands: Commands, overlays: Query<Entity, With<DebugOverlay>>) {
+    for entity in &overlays {
+        commands.entity(entity).despawn();
+    }
 }
 
 fn update_debug_overlay(
