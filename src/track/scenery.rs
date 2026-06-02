@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use super::markers::{GeneratedEnvironment, GeneratedScenery, SpawnedSceneEntity};
+
 pub fn spawn_grass_field(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -13,6 +15,8 @@ pub fn spawn_grass_field(
             ..default()
         })),
         Transform::from_xyz(0.0, -0.015, 0.0),
+        GeneratedEnvironment,
+        SpawnedSceneEntity,
     ));
 }
 
@@ -83,6 +87,8 @@ pub fn spawn_forest_scenery(
                 0.15,
                 0.2,
             )),
+            GeneratedScenery,
+            SpawnedSceneEntity,
         ));
     }
 }
@@ -98,11 +104,15 @@ fn spawn_oak_tree(
         Mesh3d(meshes.add(Cylinder::new(0.28, 2.4).mesh().resolution(7))),
         MeshMaterial3d(trunk_material),
         Transform::from_translation(position + Vec3::Y * 1.2),
+        GeneratedScenery,
+        SpawnedSceneEntity,
     ));
     commands.spawn((
         Mesh3d(meshes.add(Sphere::new(1.45).mesh().ico(1).expect("valid ico sphere"))),
         MeshMaterial3d(leaf_material),
         Transform::from_translation(position + Vec3::Y * 2.65),
+        GeneratedScenery,
+        SpawnedSceneEntity,
     ));
 }
 
@@ -117,6 +127,8 @@ fn spawn_spruce_tree(
         Mesh3d(meshes.add(Cylinder::new(0.22, 2.1).mesh().resolution(7))),
         MeshMaterial3d(trunk_material),
         Transform::from_translation(position + Vec3::Y * 1.05),
+        GeneratedScenery,
+        SpawnedSceneEntity,
     ));
 
     for (height, radius, y) in [(1.8, 1.6, 2.0), (1.6, 1.25, 2.75), (1.35, 0.9, 3.35)] {
@@ -124,6 +136,8 @@ fn spawn_spruce_tree(
             Mesh3d(meshes.add(Cone::new(radius, height).mesh().resolution(7))),
             MeshMaterial3d(leaf_material.clone()),
             Transform::from_translation(position + Vec3::Y * y),
+            GeneratedScenery,
+            SpawnedSceneEntity,
         ));
     }
 }

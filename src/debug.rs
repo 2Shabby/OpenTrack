@@ -5,7 +5,7 @@ use crate::ghost::SessionBestGhost;
 use crate::hotseat::HotseatSession;
 use crate::run::RunState;
 use crate::surface::SurfaceLibrary;
-use crate::track::GeneratedTrackInfo;
+use crate::track::{GeneratedRail, GeneratedRoadSurface, GeneratedTrackInfo, GeneratedTrigger};
 
 pub struct DebugPlugin;
 
@@ -44,6 +44,9 @@ fn update_debug_overlay(
     hotseat: Res<HotseatSession>,
     surfaces: Res<SurfaceLibrary>,
     track: Res<GeneratedTrackInfo>,
+    road_surfaces: Query<(), With<GeneratedRoadSurface>>,
+    rails: Query<(), With<GeneratedRail>>,
+    triggers: Query<(), With<GeneratedTrigger>>,
     mut overlay: Single<&mut Text, With<DebugOverlay>>,
 ) {
     let params = surfaces.get(car.current_surface);
@@ -57,10 +60,16 @@ fn update_debug_overlay(
         .unwrap_or_else(|| "none".to_string());
 
     overlay.0 = format!(
-        "seed: {}\npieces: {}\ntrack cps: {}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
+        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nsurface: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
         track.seed,
         track.piece_count,
         track.checkpoint_count,
+        road_surfaces.iter().count(),
+        track.road_surface_count,
+        rails.iter().count(),
+        track.rail_count,
+        triggers.iter().count(),
+        track.trigger_count,
         hotseat.active_player_name(),
         hotseat.player_count(),
         best,

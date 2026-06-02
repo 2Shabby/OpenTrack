@@ -31,6 +31,22 @@ pub struct GeneratedTrackInfo {
     pub seed: u64,
     pub piece_count: usize,
     pub checkpoint_count: usize,
+    pub road_surface_count: usize,
+    pub rail_count: usize,
+    pub trigger_count: usize,
+}
+
+impl GeneratedTrackInfo {
+    pub fn from_pieces(recipe: &TrackRecipe, pieces: &[TrackPiece]) -> Self {
+        Self {
+            seed: recipe.seed,
+            piece_count: pieces.len(),
+            checkpoint_count: TrackPiece::checkpoint_count(pieces),
+            road_surface_count: pieces.len(),
+            rail_count: pieces.len() * 2,
+            trigger_count: TrackPiece::trigger_count(pieces),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -58,6 +74,18 @@ impl TrackPiece {
         pieces
             .iter()
             .filter(|piece| matches!(piece.kind, TrackPieceKind::Checkpoint(_)))
+            .count()
+    }
+
+    pub fn trigger_count(pieces: &[Self]) -> usize {
+        pieces
+            .iter()
+            .filter(|piece| {
+                matches!(
+                    piece.kind,
+                    TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish
+                )
+            })
             .count()
     }
 }

@@ -4,6 +4,10 @@ use super::generation::{
     GeneratedTrackInfo, PIECE_LENGTH, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece,
     TrackPieceKind, TrackRecipe, car_spawn_for, generate_track_pieces, validate_piece_connections,
 };
+use super::markers::{
+    GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, SpawnedCamera, SpawnedLighting,
+    SpawnedPlayer, SpawnedSceneEntity,
+};
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::sports_car_mesh;
 use crate::driving::{CarSpawn, ChaseCamera, PlayerCar};
@@ -26,18 +30,14 @@ pub fn spawn_generated_track(
     if let Err(error) = validate_piece_connections(&pieces) {
         warn!("generated track connection validation failed: {error}");
     }
-    let checkpoint_count = TrackPiece::checkpoint_count(&pieces);
+    let track_info = GeneratedTrackInfo::from_pieces(recipe, &pieces);
     let car_spawn = car_spawn_for(&pieces);
 
     for piece in pieces.iter().copied() {
         spawn_piece(&mut commands, &mut meshes, &mut materials, piece);
     }
 
-    commands.insert_resource(GeneratedTrackInfo {
-        seed: recipe.seed,
-        piece_count: pieces.len(),
-        checkpoint_count,
-    });
+    commands.insert_resource(track_info);
     commands.insert_resource(car_spawn);
 
     spawn_car(&mut commands, &mut meshes, &mut materials, car_spawn);
@@ -60,6 +60,8 @@ fn spawn_piece(
         })),
         piece.pose.transform(),
         SurfaceZone::new(piece.surface, piece.pose, piece.bounds()),
+        GeneratedRoadSurface,
+        SpawnedSceneEntity,
     ));
 
     spawn_rails(commands, meshes, materials, piece);
@@ -97,6 +99,8 @@ fn spawn_rails(
                     Vec2::new(RAIL_THICKNESS * 0.5, PIECE_LENGTH * 0.5),
                 ),
             },
+            GeneratedRail,
+            SpawnedSceneEntity,
         ));
     }
 }
@@ -127,6 +131,8 @@ fn spawn_trigger(
         Transform::from_xyz(line.position.x, 0.04, line.position.y)
             .with_rotation(Quat::from_rotation_y(line.yaw)),
         TrackTrigger::new(kind, line, half_extents),
+        GeneratedTrigger,
+        SpawnedSceneEntity,
     ));
 }
 
@@ -147,6 +153,8 @@ fn spawn_car(
         Transform::from_translation(car_spawn.translation)
             .with_rotation(Quat::from_rotation_y(car_spawn.yaw)),
         PlayerCar::default(),
+        SpawnedPlayer,
+        SpawnedSceneEntity,
     ));
 }
 
@@ -158,6 +166,8 @@ fn spawn_lighting(commands: &mut Commands) {
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.9, -0.8, 0.0)),
+        SpawnedLighting,
+        SpawnedSceneEntity,
     ));
 }
 
@@ -169,6 +179,8 @@ fn spawn_camera(commands: &mut Commands, car_spawn: CarSpawn) {
         )
         .looking_at(car_spawn.translation, Vec3::Y),
         ChaseCamera,
+        SpawnedCamera,
+        SpawnedSceneEntity,
     ));
 }
 

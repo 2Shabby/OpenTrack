@@ -1,8 +1,10 @@
 mod generation;
+mod markers;
 mod scenery;
 mod spawn;
 
 pub use generation::{GeneratedTrackInfo, TrackRecipe};
+pub use markers::{GeneratedRail, GeneratedRoadSurface, GeneratedTrigger};
 
 use bevy::prelude::*;
 
