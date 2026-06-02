@@ -5,7 +5,9 @@ use bevy::prelude::*;
 pub use model::{DriveMode, DrivingTuning, HandlingState};
 
 use crate::game_state::{GameState, not_paused};
-use crate::physics::{EcsTrackPhysicsQueries, RailCollider, TrackPhysicsQueries};
+use crate::physics::{
+    EcsTrackPhysicsQueries, GroundContact, GroundSource, RailCollider, TrackPhysicsQueries,
+};
 use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
 
 const DEFAULT_CAR_START: Vec3 = Vec3::new(0.0, 0.05, -26.0);
@@ -75,6 +77,7 @@ pub struct PlayerCar {
     pub velocity: Vec3,
     pub yaw: f32,
     pub current_surface: SurfaceKind,
+    pub ground_source: GroundSource,
     pub throttle: f32,
     pub steer: f32,
     pub signed_speed: f32,
@@ -90,6 +93,7 @@ impl Default for PlayerCar {
             velocity: Vec3::ZERO,
             yaw: 0.0,
             current_surface: SurfaceKind::Asphalt,
+            ground_source: GroundSource::Road,
             throttle: 0.0,
             steer: 0.0,
             signed_speed: 0.0,
@@ -133,19 +137,23 @@ pub enum WheelCorner {
 
 #[derive(Clone, Copy)]
 pub struct WheelContacts {
-    pub front_left: SurfaceKind,
-    pub front_right: SurfaceKind,
-    pub rear_left: SurfaceKind,
-    pub rear_right: SurfaceKind,
+    pub front_left: GroundContact,
+    pub front_right: GroundContact,
+    pub rear_left: GroundContact,
+    pub rear_right: GroundContact,
 }
 
 impl Default for WheelContacts {
     fn default() -> Self {
+        let contact = GroundContact {
+            source: GroundSource::Road,
+            surface: SurfaceKind::Asphalt,
+        };
         Self {
-            front_left: SurfaceKind::Asphalt,
-            front_right: SurfaceKind::Asphalt,
-            rear_left: SurfaceKind::Asphalt,
-            rear_right: SurfaceKind::Asphalt,
+            front_left: contact,
+            front_right: contact,
+            rear_left: contact,
+            rear_right: contact,
         }
     }
 }
@@ -171,24 +179,33 @@ impl WheelContacts {
 
         contacts
             .iter()
-            .map(|surface| surfaces.get(*surface).lateral_grip)
+            .map(|contact| surfaces.get(contact.surface).lateral_grip)
             .sum::<f32>()
             / contacts.len() as f32
     }
 
     pub fn split_surface(self) -> bool {
-        self.front_left != self.front_right
-            || self.front_left != self.rear_left
-            || self.front_left != self.rear_right
+        self.front_left.surface != self.front_right.surface
+            || self.front_left.surface != self.rear_left.surface
+            || self.front_left.surface != self.rear_right.surface
+            || self.front_left.source != self.front_right.source
+            || self.front_left.source != self.rear_left.source
+            || self.front_left.source != self.rear_right.source
     }
 
     pub fn at(self, corner: WheelCorner) -> SurfaceKind {
         match corner {
-            WheelCorner::FrontLeft => self.front_left,
-            WheelCorner::FrontRight => self.front_right,
-            WheelCorner::RearLeft => self.rear_left,
-            WheelCorner::RearRight => self.rear_right,
+            WheelCorner::FrontLeft => self.front_left.surface,
+            WheelCorner::FrontRight => self.front_right.surface,
+            WheelCorner::RearLeft => self.rear_left.surface,
+            WheelCorner::RearRight => self.rear_right.surface,
         }
+    }
+}
+
+impl GroundContact {
+    fn label(self) -> String {
+        format!("{}:{}", self.source.label(), self.surface.label())
     }
 }
 
@@ -213,7 +230,9 @@ fn drive_car(
         let controls = model::DriverControls::from_keys(&keys);
         car.throttle = controls.throttle;
         car.steer = controls.steer;
-        car.current_surface = physics.surface_at(transform.translation);
+        let ground = physics.ground_at(transform.translation);
+        car.current_surface = ground.surface;
+        car.ground_source = ground.source;
 
         let surface = surfaces.get(car.current_surface);
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
@@ -277,10 +296,10 @@ fn sample_wheel_contacts(
     let right = basis.right * WHEEL_SAMPLE_HALF_WIDTH;
 
     WheelContacts {
-        front_left: physics.surface_at(center + front + left),
-        front_right: physics.surface_at(center + front + right),
-        rear_left: physics.surface_at(center + rear + left),
-        rear_right: physics.surface_at(center + rear + right),
+        front_left: physics.ground_at(center + front + left),
+        front_right: physics.ground_at(center + front + right),
+        rear_left: physics.ground_at(center + rear + left),
+        rear_right: physics.ground_at(center + rear + right),
     }
 }
 

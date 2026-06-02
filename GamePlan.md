@@ -103,7 +103,7 @@ Use a small project-owned physics query layer so the backend can be swapped late
 trait TrackPhysicsQueries {
     fn raycast_ground(...) -> Option<GroundHit>;
     fn cast_car_shape(...) -> Option<CarHit>;
-    fn surface_at(...) -> SurfaceKind;
+    fn ground_at(...) -> GroundContact;
 }
 ```
 
@@ -565,6 +565,7 @@ Procedural assembly has started:
 * Track spawning and validation now consume the same generated piece geometry instead of rebuilding road, rail, and trigger bounds separately.
 * Curves are now explicit generated piece kinds instead of straight pieces with curved frames, and generation inserts straight recovery after curves.
 * Pause flow now supports resume, restart, setup, main menu, and quit with run state reset on scene exits.
+* Ground queries now distinguish road/off-track source from handling surface; HUD/debug show both instead of treating surface lookup misses as just another road surface.
 
 ## Pending Work
 
@@ -587,7 +588,7 @@ Pending:
 Pending:
 
 * continued tuning of reverse/brake/steering feel
-* use four wheel contacts for airborne checks
+* add true support/airborne states once vertical road/support geometry exists
 * tune the current drift assist across surface and speed cases
 * drift case matrix: brake-entered drift, throttle-held drift, counter-steer recovery, split-surface slide, ice slide, boost slide, reverse/no-drift
 * counter-steer and spin-out damping assist tuned for Trackmania-like readability

@@ -20,7 +20,28 @@ pub struct CarHit {
 
 pub trait TrackPhysicsQueries {
     fn cast_car_shape(&self, _position: Vec3, _velocity: Vec3) -> Option<CarHit>;
-    fn surface_at(&self, position: Vec3) -> SurfaceKind;
+    fn ground_at(&self, position: Vec3) -> GroundContact;
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GroundSource {
+    Road,
+    OffTrack,
+}
+
+impl GroundSource {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Road => "road",
+            Self::OffTrack => "offtrack",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GroundContact {
+    pub source: GroundSource,
+    pub surface: SurfaceKind,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -65,12 +86,18 @@ impl EcsTrackPhysicsQueries {
 }
 
 impl TrackPhysicsQueries for EcsTrackPhysicsQueries {
-    fn surface_at(&self, position: Vec3) -> SurfaceKind {
+    fn ground_at(&self, position: Vec3) -> GroundContact {
         self.surface_zones
             .iter()
             .find(|zone| zone.contains(position))
-            .map(|zone| zone.kind)
-            .unwrap_or(SurfaceKind::Grass)
+            .map(|zone| GroundContact {
+                source: GroundSource::Road,
+                surface: zone.kind,
+            })
+            .unwrap_or(GroundContact {
+                source: GroundSource::OffTrack,
+                surface: SurfaceKind::Grass,
+            })
     }
 
     fn cast_car_shape(&self, position: Vec3, _velocity: Vec3) -> Option<CarHit> {
