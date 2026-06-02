@@ -117,7 +117,9 @@ Car state:
 transform
 velocity
 yaw/angular state
+visual body pitch/roll state
 grounded/airborne state
+four wheel contact samples
 current surface
 throttle/brake/steer input
 slip/drift state
@@ -131,6 +133,8 @@ Core behavior:
 * braking
 * steering
 * grip/slip
+* per-wheel surface/contact sampling for handling decisions
+* visual body roll/pitch from steering, acceleration, braking, and impacts
 * airborne control
 * slope response
 * wall/floor collision response
@@ -157,8 +161,10 @@ Arcade drift direction:
 * keep the custom gameplay controller instead of adopting a full tire simulator
 * model drift as an explicit handling state/assist layered over the current velocity/yaw controller
 * use lateral slip, speed, steering, throttle, and braking to enter/hold/exit drift
+* evaluate drift cases from four wheel contacts: all-road, split-surface, front-only, rear-only, airborne/partial contact
 * allow controlled counter-steer behavior instead of full spin-out simulation
 * tune drift by changing lateral grip, yaw authority, and damping rather than adding drivetrain complexity
+* keep body roll and wheel pose as visual/readability primitives unless a gameplay reason requires them to affect handling
 * keep reverse steering separate from forward drift behavior so backing up stays predictable
 
 ## Surfaces
@@ -576,8 +582,12 @@ Pending:
 Pending:
 
 * continued tuning of reverse/brake/steering feel
+* four wheel contact sample model for surface detection, airborne checks, and split-surface cases
 * use the current slip state to drive an explicit drift assist
+* drift case matrix: brake-entered drift, throttle-held drift, counter-steer recovery, split-surface slide, ice slide, boost slide, reverse/no-drift
 * counter-steer and spin-out damping assist tuned for Trackmania-like readability
+* visual wheel transform primitives: steer angle, wheel spin, and grounded/contact hints
+* visual body roll/pitch primitives for turning, braking, acceleration, boost, and wall impacts
 * better collision response at high speed
 * visual feedback for surface transitions and boost
 * optional controller support once keyboard feel stabilizes
@@ -688,6 +698,16 @@ Success condition:
 
 ```text
 A local session can be configured, played, paused, completed, and repeated without debug-key workflows.
+```
+
+### 9. Vehicle Feel Upgrade — Pending
+
+Four wheel contact semantics, drift assist cases, visual wheel motion, and body roll/pitch.
+
+Success condition:
+
+```text
+The car clearly communicates grip, slide, braking, acceleration, and recovery while staying arcade-readable.
 ```
 
 ## Main Risks
