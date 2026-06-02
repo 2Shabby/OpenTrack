@@ -8,6 +8,7 @@ use super::markers::{
     GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, SpawnedCamera, SpawnedLighting,
     SpawnedPlayer, SpawnedSceneEntity,
 };
+use super::road_mesh::road_surface_mesh;
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::sports_car_mesh;
 use crate::driving::{CarSpawn, ChaseCamera, PlayerCar};
@@ -54,13 +55,13 @@ fn spawn_piece(
     let piece_pose = piece.pose();
 
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(TRACK_WIDTH, piece.length()))),
+        Mesh3d(meshes.add(road_surface_mesh(&piece.frames(), TRACK_WIDTH))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: surface_color(piece.surface),
             perceptual_roughness: 0.92,
             ..default()
         })),
-        piece_pose.transform(),
+        Transform::default(),
         SurfaceZone::new(piece.surface, piece_pose, piece.bounds()),
         GeneratedRoadSurface,
         SpawnedSceneEntity,

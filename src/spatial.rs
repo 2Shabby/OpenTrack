@@ -15,17 +15,16 @@ impl Pose2 {
         Vec2::new(self.yaw.sin(), self.yaw.cos())
     }
 
+    pub fn right(self) -> Vec2 {
+        Vec2::new(self.yaw.cos(), -self.yaw.sin())
+    }
+
     pub fn local_to_world(self, local: Vec2) -> Vec2 {
         self.position + rotate_2d(local, self.yaw)
     }
 
     pub fn world_to_local(self, world: Vec2) -> Vec2 {
         rotate_2d(world - self.position, -self.yaw)
-    }
-
-    pub fn transform(self) -> Transform {
-        Transform::from_xyz(self.position.x, 0.0, self.position.y)
-            .with_rotation(Quat::from_rotation_y(self.yaw))
     }
 }
 

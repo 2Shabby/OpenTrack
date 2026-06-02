@@ -526,6 +526,7 @@ Procedural assembly has started:
 * Surface zones, rail colliders, and checkpoint/finish triggers now use oriented bounds.
 * Track generation now stores explicit entry/exit transforms per piece to keep adjacent pieces and lines aligned.
 * Straight pieces now derive center pose, length, road bounds, rails, and surface zones from entry/exit centerline frames.
+* Road surface visuals are generated as meshes from path frames instead of spawned as rotated plane primitives.
 * Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
 * Generated scene entities are tagged by semantic role: environment, scenery, road surface, rail, trigger, player, camera, and lighting.
 * Shared spatial types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
