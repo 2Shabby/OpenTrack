@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use super::generation::{
-    GeneratedTrackInfo, PIECE_LENGTH, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece,
-    TrackPieceKind, TrackRecipe, car_spawn_for, generate_track_pieces, validate_piece_connections,
+    GeneratedTrackInfo, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece, TrackPieceKind,
+    TrackRecipe, car_spawn_for, generate_track_pieces, validate_piece_connections,
 };
 use super::markers::{
     GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, SpawnedCamera, SpawnedLighting,
@@ -51,15 +51,17 @@ fn spawn_piece(
     materials: &mut Assets<StandardMaterial>,
     piece: TrackPiece,
 ) {
+    let piece_pose = piece.pose();
+
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(TRACK_WIDTH, PIECE_LENGTH))),
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(TRACK_WIDTH, piece.length()))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: surface_color(piece.surface),
             perceptual_roughness: 0.92,
             ..default()
         })),
-        piece.pose.transform(),
-        SurfaceZone::new(piece.surface, piece.pose, piece.bounds()),
+        piece_pose.transform(),
+        SurfaceZone::new(piece.surface, piece_pose, piece.bounds()),
         GeneratedRoadSurface,
         SpawnedSceneEntity,
     ));
@@ -80,23 +82,25 @@ fn spawn_rails(
         ..default()
     });
 
+    let piece_pose = piece.pose();
+
     for side in [-1.0, 1.0] {
         let local = Vec2::new(side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5), 0.0);
-        let rail_pose = Pose2::new(piece.pose.local_to_world(local), piece.pose.yaw);
+        let rail_pose = Pose2::new(piece_pose.local_to_world(local), piece_pose.yaw);
 
         commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, PIECE_LENGTH))),
+            Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, piece.length()))),
             MeshMaterial3d(rail_material.clone()),
             Transform::from_xyz(
                 rail_pose.position.x,
                 RAIL_HEIGHT * 0.5,
                 rail_pose.position.y,
             )
-            .with_rotation(Quat::from_rotation_y(piece.pose.yaw)),
+            .with_rotation(Quat::from_rotation_y(piece_pose.yaw)),
             RailCollider {
                 bounds: OrientedRect::new(
                     rail_pose,
-                    Vec2::new(RAIL_THICKNESS * 0.5, PIECE_LENGTH * 0.5),
+                    Vec2::new(RAIL_THICKNESS * 0.5, piece.length() * 0.5),
                 ),
             },
             GeneratedRail,

@@ -60,14 +60,37 @@ pub enum TrackPieceKind {
 pub struct TrackPiece {
     pub kind: TrackPieceKind,
     pub surface: SurfaceKind,
-    pub pose: Pose2,
     pub entry: Pose2,
     pub exit: Pose2,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct PathFrame {
+    pub pose: Pose2,
+}
+
 impl TrackPiece {
+    pub fn frames(self) -> [PathFrame; 2] {
+        [
+            PathFrame { pose: self.entry },
+            PathFrame { pose: self.exit },
+        ]
+    }
+
+    pub fn pose(self) -> Pose2 {
+        Pose2::new(
+            (self.entry.position + self.exit.position) * 0.5,
+            self.entry.yaw,
+        )
+    }
+
+    pub fn length(self) -> f32 {
+        let [entry, exit] = self.frames();
+        entry.pose.position.distance(exit.pose.position)
+    }
+
     pub fn bounds(self) -> Vec2 {
-        Vec2::new(TRACK_WIDTH * 0.5, PIECE_LENGTH * 0.5)
+        Vec2::new(TRACK_WIDTH * 0.5, self.length() * 0.5)
     }
 
     pub fn checkpoint_count(pieces: &[Self]) -> usize {
@@ -114,13 +137,6 @@ pub fn generate_track_pieces(recipe: &TrackRecipe) -> Vec<TrackPiece> {
             let piece = TrackPiece {
                 kind,
                 surface,
-                pose: Pose2::new(
-                    Vec2::new(
-                        (entry.position.x + exit.position.x) * 0.5,
-                        (entry.position.y + exit.position.y) * 0.5,
-                    ),
-                    piece_yaw,
-                ),
                 entry,
                 exit,
             };
