@@ -30,7 +30,6 @@ Choose recipe → Generate track → Drive → Retry → Beat ghost → Climb le
 * generated full tracks
 * authored modular track pieces
 * replayable recipes/seeds
-* saved/shared generated tracks
 * checkpoints, timer, leaderboard
 * ghost replays
 * multiple surfaces
@@ -187,9 +186,9 @@ Track sources:
 
 ```text
 fresh generated track
-saved generated track
-shared generated track
 ```
+
+Saved/shared track mechanics are currently out of scope. Keep generation deterministic from recipe + seed so this can be revisited later without changing the generator contract.
 
 No hand-authored full tracks.
 
@@ -265,7 +264,6 @@ track seed
 player list
 current player
 leaderboard
-saved runs
 ```
 
 No hard player cap. UI should handle many names pragmatically.
@@ -381,7 +379,7 @@ Initial dependency set:
 bevy 0.18.1           engine/runtime
 avian3d 0.6           preferred physics query backend, not gameplay-owned
 bevy_egui 0.39.1      debug/tuning UI
-serde 1               save data, track recipes, piece definitions
+serde 1               recipe/replay serialization, not save-game mechanics
 ron 0.10              human-editable tuning/piece files
 rand/rand_chacha 0.9  deterministic procedural generation
 ```
@@ -422,7 +420,7 @@ Early module responsibilities:
 * `run`: timer, checkpoint order, finish state, retry/reset flow.
 * `hotseat`: players, turn order, per-track leaderboard.
 * `ghost`: transform sampling, playback entity spawning, replay serialization.
-* `debug`: Bevy/egui overlays for tuning and inspection.
+* `debug`: lightweight Bevy UI now; egui tuning panels later if the controls outgrow text.
 
 ## First Code Slice
 
@@ -455,11 +453,21 @@ R                 reset car
 
 Next code changes after this slice:
 
-* Move tuning and systems out of `main.rs` into `src/driving`.
-* Add a fixed timestep for vehicle update.
-* Add a minimal debug overlay for speed, input, and grounded/surface state.
-* Add surface strips on the plane to test asphalt/dirt/ice/slowdown/boost handling.
+* Add simple checkpoint/finish triggers to support complete timed runs.
+* Split debug tuning values into editable resources or RON assets once values settle.
+* Start replacing primitive planes with authored modular track pieces.
 * Add a `physics` abstraction module before any Avian-specific gameplay code is written.
+
+## Second Code Slice
+
+Milestone 2 has started:
+
+* driving systems moved into `src/driving.rs`
+* surface definitions and zones added in `src/surface.rs`
+* fixed timestep driving enabled at 60 Hz
+* simple Bevy UI debug overlay added in `src/debug.rs`
+* asphalt, dirt, ice, slowdown, and boost strips added to the sandbox
+* A/D steering corrected from the first playtest feedback
 
 ## Milestones
 
