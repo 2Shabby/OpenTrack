@@ -1,14 +1,14 @@
 use bevy::prelude::*;
 
 use super::generation::{
-    GeneratedTrackInfo, PathFrame, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackBounds,
-    TrackPiece, TrackPieceKind, TrackRecipe, TrackSegment, car_spawn_for, generate_track_pieces,
-    validate_track_pieces,
+    GeneratedTrackInfo, RAIL_HEIGHT, RAIL_THICKNESS, TRACK_WIDTH, TrackBounds, TrackPiece,
+    TrackRecipe, car_spawn_for, generate_track_pieces, validate_track_pieces,
 };
 use super::markers::{
     GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, SpawnedCamera, SpawnedLighting,
     SpawnedPlayer, SpawnedSceneEntity,
 };
+use super::piece::{TrackPieceMarker, TrackRailSpan, TrackRoadSpan, TrackTriggerLine};
 use super::road_mesh::road_surface_mesh;
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::sports_car_mesh;
@@ -17,7 +17,7 @@ use crate::driving::{
 };
 use crate::physics::RailCollider;
 use crate::run::{TrackTrigger, TrackTriggerKind};
-use crate::spatial::{OrientedRect, Pose2, forward_3d};
+use crate::spatial::forward_3d;
 use crate::surface::{SurfaceKind, SurfaceZone};
 
 pub fn spawn_generated_track(
@@ -80,88 +80,88 @@ fn spawn_piece(
         ..default()
     });
 
-    for (frames, segment) in piece.frames.windows(2).zip(piece.segments()) {
-        spawn_track_segment(
-            commands,
-            meshes,
-            piece.surface,
-            [frames[0], frames[1]],
-            segment,
-            road_material.clone(),
-            rail_material.clone(),
-        );
+    let geometry = piece.geometry();
+
+    for road in geometry.roads {
+        spawn_road_span(commands, meshes, road, road_material.clone());
     }
 
-    spawn_trigger(commands, meshes, materials, piece);
+    for rail in geometry.rails {
+        spawn_rail_span(commands, meshes, rail, rail_material.clone());
+    }
+
+    spawn_trigger(commands, meshes, materials, geometry.trigger);
 }
 
-fn spawn_track_segment(
+fn spawn_road_span(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    surface: SurfaceKind,
-    frames: [PathFrame; 2],
-    segment: TrackSegment,
+    road: TrackRoadSpan,
     road_material: Handle<StandardMaterial>,
-    rail_material: Handle<StandardMaterial>,
 ) {
     commands.spawn((
-        Mesh3d(meshes.add(road_surface_mesh(&frames, TRACK_WIDTH))),
+        Mesh3d(meshes.add(road_surface_mesh(&road.frames, TRACK_WIDTH))),
         MeshMaterial3d(road_material),
         Transform::default(),
-        SurfaceZone::new(surface, segment.pose, segment.road_half_extents()),
+        SurfaceZone {
+            kind: road.surface,
+            bounds: road.bounds,
+        },
         GeneratedRoadSurface,
         SpawnedSceneEntity,
     ));
+}
 
-    if segment.has_rails {
-        for side in [-1.0, 1.0] {
-            let rail_pose = segment.rail_pose(side);
-
-            commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, segment.length))),
-                MeshMaterial3d(rail_material.clone()),
-                Transform::from_xyz(
-                    rail_pose.position.x,
-                    RAIL_HEIGHT * 0.5,
-                    rail_pose.position.y,
-                )
-                .with_rotation(Quat::from_rotation_y(segment.pose.yaw)),
-                RailCollider {
-                    bounds: OrientedRect::new(rail_pose, segment.rail_half_extents()),
-                },
-                GeneratedRail,
-                SpawnedSceneEntity,
-            ));
-        }
-    }
+fn spawn_rail_span(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    rail: TrackRailSpan,
+    rail_material: Handle<StandardMaterial>,
+) {
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, rail.length))),
+        MeshMaterial3d(rail_material),
+        Transform::from_xyz(
+            rail.bounds.pose.position.x,
+            RAIL_HEIGHT * 0.5,
+            rail.bounds.pose.position.y,
+        )
+        .with_rotation(Quat::from_rotation_y(rail.bounds.pose.yaw)),
+        RailCollider {
+            bounds: rail.bounds,
+        },
+        GeneratedRail,
+        SpawnedSceneEntity,
+    ));
 }
 
 fn spawn_trigger(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
-    piece: &TrackPiece,
+    trigger: Option<TrackTriggerLine>,
 ) {
-    let Some((kind, color, line)) = trigger_for_piece(piece) else {
+    let Some(trigger) = trigger else {
         return;
     };
-
-    let half_extents = Vec2::new(TRACK_WIDTH * 0.5, 0.45);
+    let kind = trigger_kind(trigger.marker);
+    let color = trigger_color(trigger.marker);
+    let bounds = trigger.bounds;
 
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(
-            half_extents.x * 2.0,
+            bounds.half_extents.x * 2.0,
             0.08,
-            half_extents.y * 2.0,
+            bounds.half_extents.y * 2.0,
         ))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: color,
             emissive: color.into(),
             ..default()
         })),
-        Transform::from_xyz(line.position.x, 0.04, line.position.y)
-            .with_rotation(Quat::from_rotation_y(line.yaw)),
-        TrackTrigger::new(kind, line, half_extents),
+        Transform::from_xyz(bounds.pose.position.x, 0.04, bounds.pose.position.y)
+            .with_rotation(Quat::from_rotation_y(bounds.pose.yaw)),
+        TrackTrigger { kind, bounds },
         GeneratedTrigger,
         SpawnedSceneEntity,
     ));
@@ -250,19 +250,17 @@ fn spawn_camera(commands: &mut Commands, car_spawn: CarSpawn) {
     ));
 }
 
-fn trigger_for_piece(piece: &TrackPiece) -> Option<(TrackTriggerKind, Color, Pose2)> {
-    match piece.kind {
-        TrackPieceKind::Straight => None,
-        TrackPieceKind::Checkpoint(index) => Some((
-            TrackTriggerKind::Checkpoint(index),
-            Color::srgb(0.15, 0.48, 1.0),
-            piece.entry(),
-        )),
-        TrackPieceKind::Finish => Some((
-            TrackTriggerKind::Finish,
-            Color::srgb(1.0, 1.0, 1.0),
-            piece.exit(),
-        )),
+fn trigger_kind(marker: TrackPieceMarker) -> TrackTriggerKind {
+    match marker {
+        TrackPieceMarker::Checkpoint(index) => TrackTriggerKind::Checkpoint(index),
+        TrackPieceMarker::Finish => TrackTriggerKind::Finish,
+    }
+}
+
+fn trigger_color(marker: TrackPieceMarker) -> Color {
+    match marker {
+        TrackPieceMarker::Checkpoint(_) => Color::srgb(0.15, 0.48, 1.0),
+        TrackPieceMarker::Finish => Color::srgb(1.0, 1.0, 1.0),
     }
 }
 

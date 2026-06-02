@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::driving::PlayerCar;
 use crate::game_state::{GameState, not_paused};
-use crate::spatial::{OrientedRect, Pose2};
+use crate::spatial::OrientedRect;
 
 pub struct RunPlugin;
 
@@ -74,13 +74,6 @@ pub struct TrackTrigger {
 }
 
 impl TrackTrigger {
-    pub fn new(kind: TrackTriggerKind, pose: Pose2, half_extents: Vec2) -> Self {
-        Self {
-            kind,
-            bounds: OrientedRect::new(pose, half_extents),
-        }
-    }
-
     pub fn contains(&self, position: Vec3) -> bool {
         self.bounds.contains_xz(position)
     }

@@ -561,6 +561,8 @@ Procedural assembly has started:
 * Off-track fallback surface is now grass instead of asphalt, with slower acceleration and higher drag.
 * Wheel visuals tint by contact surface, and HUD shows handling/surface state.
 * Setup recipe controls now include difficulty and surface mix, and generation uses them for curve frequency and surface weighting.
+* `track/piece.rs` now exposes one piece geometry contract for road spans, rail spans, and checkpoint/finish trigger lines.
+* Track spawning and validation now consume the same generated piece geometry instead of rebuilding road, rail, and trigger bounds separately.
 
 ## Pending Work
 
@@ -576,8 +578,7 @@ This is the next sensible phase before adding more track complexity, because run
 
 Pending:
 
-* a real piece-library contract for visuals, road surface zones, rails, triggers, and colliders
-* move more per-segment spawning into reusable piece-library data
+* expand the piece-library contract with authored piece metadata, difficulty tags, and connection rules
 * expand generated piece sequences beyond simple straight/arc choices
 * improve curve piece variety and validation
 * checkpoint and finish line placement for every future piece type

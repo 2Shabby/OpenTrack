@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::spatial::{OrientedRect, Pose2};
+use crate::spatial::OrientedRect;
 
 pub struct SurfacePlugin;
 
@@ -119,13 +119,4 @@ impl SurfaceLibrary {
 pub struct SurfaceZone {
     pub kind: SurfaceKind,
     pub bounds: OrientedRect,
-}
-
-impl SurfaceZone {
-    pub fn new(kind: SurfaceKind, pose: Pose2, half_extents: Vec2) -> Self {
-        Self {
-            kind,
-            bounds: OrientedRect::new(pose, half_extents),
-        }
-    }
 }

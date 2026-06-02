@@ -117,7 +117,7 @@ impl GeneratedTrackInfo {
             piece_count: pieces.len(),
             checkpoint_count: TrackPiece::checkpoint_count(pieces),
             road_surface_count: pieces.iter().map(TrackPiece::segment_count).sum(),
-            rail_count: pieces.iter().map(TrackPiece::segment_count).sum::<usize>() * 2,
+            rail_count: pieces.iter().map(TrackPiece::rail_count).sum(),
             trigger_count: TrackPiece::trigger_count(pieces),
         }
     }
@@ -142,28 +142,6 @@ pub struct PathFrame {
     pub pose: Pose2,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct TrackSegment {
-    pub pose: Pose2,
-    pub length: f32,
-    pub has_rails: bool,
-}
-
-impl TrackSegment {
-    pub fn road_half_extents(self) -> Vec2 {
-        Vec2::new(TRACK_WIDTH * 0.5, self.length * 0.5)
-    }
-
-    pub fn rail_pose(self, side: f32) -> Pose2 {
-        let local = Vec2::new(side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5), 0.0);
-        Pose2::new(self.pose.local_to_world(local), self.pose.yaw)
-    }
-
-    pub fn rail_half_extents(self) -> Vec2 {
-        Vec2::new(RAIL_THICKNESS * 0.5, self.length * 0.5)
-    }
-}
-
 impl TrackPiece {
     pub fn entry(&self) -> Pose2 {
         self.frames
@@ -179,44 +157,10 @@ impl TrackPiece {
             .unwrap_or_else(|| self.entry())
     }
 
-    pub fn segments(&self) -> Vec<TrackSegment> {
-        self.frames
-            .windows(2)
-            .map(|pair| {
-                let entry = pair[0].pose;
-                let exit = pair[1].pose;
-                TrackSegment {
-                    pose: Pose2::new(
-                        (entry.position + exit.position) * 0.5,
-                        mid_yaw(entry.yaw, exit.yaw),
-                    ),
-                    length: entry.position.distance(exit.position),
-                    has_rails: true,
-                }
-            })
-            .collect()
-    }
-
-    pub fn segment_count(&self) -> usize {
-        self.frames.len().saturating_sub(1)
-    }
-
     pub fn checkpoint_count(pieces: &[Self]) -> usize {
         pieces
             .iter()
             .filter(|piece| matches!(piece.kind, TrackPieceKind::Checkpoint(_)))
-            .count()
-    }
-
-    pub fn trigger_count(pieces: &[Self]) -> usize {
-        pieces
-            .iter()
-            .filter(|piece| {
-                matches!(
-                    piece.kind,
-                    TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish
-                )
-            })
             .count()
     }
 }
@@ -274,11 +218,41 @@ pub fn validate_track_pieces(pieces: &[TrackPiece]) -> Result<(), String> {
             ));
         }
 
-        for (segment_index, segment) in piece.segments().iter().enumerate() {
-            if segment.length <= 0.001 {
+        let geometry = piece.geometry();
+        for (segment_index, road) in geometry.roads.iter().enumerate() {
+            if road.length <= 0.001 {
                 return Err(format!(
                     "piece {index} segment {segment_index} has nonpositive length {:.4}",
-                    segment.length
+                    road.length
+                ));
+            }
+        }
+
+        if geometry.rails.len() != geometry.roads.len() * 2 {
+            return Err(format!(
+                "piece {index} has {} rail spans for {} road spans",
+                geometry.rails.len(),
+                geometry.roads.len()
+            ));
+        }
+
+        if let Some(trigger) = geometry.trigger {
+            let expected_pose = match piece.kind {
+                TrackPieceKind::Straight => piece.entry(),
+                TrackPieceKind::Checkpoint(_) => piece.entry(),
+                TrackPieceKind::Finish => piece.exit(),
+            };
+            let offset = trigger
+                .bounds
+                .pose
+                .position
+                .distance(expected_pose.position);
+            let yaw_delta = (trigger.bounds.pose.yaw - expected_pose.yaw).abs();
+
+            if offset > 0.001 || yaw_delta > 0.001 {
+                return Err(format!(
+                    "piece {index} trigger is misaligned by {:.4} and yaw {:.4}",
+                    offset, yaw_delta
                 ));
             }
         }
@@ -306,7 +280,7 @@ pub fn validate_track_pieces(pieces: &[TrackPiece]) -> Result<(), String> {
         piece_count: pieces.len(),
         checkpoint_count: TrackPiece::checkpoint_count(pieces),
         road_surface_count: pieces.iter().map(TrackPiece::segment_count).sum(),
-        rail_count: pieces.iter().map(TrackPiece::segment_count).sum::<usize>() * 2,
+        rail_count: pieces.iter().map(TrackPiece::rail_count).sum(),
         trigger_count: TrackPiece::trigger_count(pieces),
     };
 
@@ -412,8 +386,4 @@ fn curve_frames(entry: Pose2, side: f32) -> Vec<PathFrame> {
             }
         })
         .collect()
-}
-
-fn mid_yaw(entry_yaw: f32, exit_yaw: f32) -> f32 {
-    entry_yaw + (exit_yaw - entry_yaw) * 0.5
 }
