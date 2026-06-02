@@ -17,6 +17,8 @@ pub struct DrivingTuning {
     pub reverse_steering_threshold: f32,
     pub slide_speed_threshold: f32,
     pub slide_slip_angle_threshold: f32,
+    pub slide_lateral_grip_multiplier: f32,
+    pub slide_yaw_assist_rate: f32,
 }
 
 impl Default for DrivingTuning {
@@ -35,6 +37,8 @@ impl Default for DrivingTuning {
             reverse_steering_threshold: 0.8,
             slide_speed_threshold: 8.0,
             slide_slip_angle_threshold: 0.35,
+            slide_lateral_grip_multiplier: 0.58,
+            slide_yaw_assist_rate: 0.9,
         }
     }
 }
@@ -140,6 +144,28 @@ pub fn handling_state(tuning: &DrivingTuning, basis: &MotionBasis) -> HandlingSt
     } else {
         HandlingState::Grip
     }
+}
+
+pub fn lateral_grip_multiplier(tuning: &DrivingTuning, handling_state: HandlingState) -> f32 {
+    match handling_state {
+        HandlingState::Grip => 1.0,
+        HandlingState::Sliding => tuning.slide_lateral_grip_multiplier,
+    }
+}
+
+pub fn slide_yaw_assist(
+    tuning: &DrivingTuning,
+    controls: DriverControls,
+    basis: &MotionBasis,
+    handling_state: HandlingState,
+) -> f32 {
+    if handling_state != HandlingState::Sliding || basis.forward_speed <= 1.0 {
+        return 0.0;
+    }
+
+    let speed_ratio = (basis.forward_speed / tuning.max_forward_speed).clamp(0.0, 1.0);
+
+    -controls.steer * tuning.slide_yaw_assist_rate * speed_ratio
 }
 
 pub fn steering_yaw_delta(

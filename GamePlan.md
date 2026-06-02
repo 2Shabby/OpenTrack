@@ -549,6 +549,7 @@ Procedural assembly has started:
 * Setup screen configures player count, track seed, track length, and car color before spawning gameplay.
 * Finished runs move to a results screen with retry, next-player, main-menu, quit, and in-memory leaderboard display.
 * Driving model samples four wheel surface contacts and reports them in debug for split-surface drift tuning.
+* First-pass drift assist uses slip state to reduce lateral damping and add controlled yaw assist while sliding.
 
 ## Pending Work
 
@@ -581,7 +582,7 @@ Pending:
 
 * continued tuning of reverse/brake/steering feel
 * use four wheel contacts for airborne checks and split-surface handling decisions
-* use the current slip state to drive an explicit drift assist
+* tune the current drift assist across surface and speed cases
 * drift case matrix: brake-entered drift, throttle-held drift, counter-steer recovery, split-surface slide, ice slide, boost slide, reverse/no-drift
 * counter-steer and spin-out damping assist tuned for Trackmania-like readability
 * visual wheel transform primitives: steer angle, wheel spin, and grounded/contact hints

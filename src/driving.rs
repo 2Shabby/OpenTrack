@@ -172,15 +172,21 @@ fn drive_car(
         car.handling_state = model::handling_state(&tuning, &basis);
 
         car.yaw += model::steering_yaw_delta(&tuning, &surface, controls, &basis) * dt;
+        car.yaw += model::slide_yaw_assist(&tuning, controls, &basis, car.handling_state) * dt;
 
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
         let drive_force =
             model::drive_force(&tuning, &surface, controls.throttle, basis.forward_speed);
+        let lateral_grip_multiplier = model::lateral_grip_multiplier(&tuning, car.handling_state);
 
         car.velocity += basis.forward * controls.throttle * drive_force * dt;
         car.velocity += basis.forward * surface.boost_force * dt;
-        car.velocity -=
-            basis.right * basis.lateral_speed * tuning.lateral_grip * surface.lateral_grip * dt;
+        car.velocity -= basis.right
+            * basis.lateral_speed
+            * tuning.lateral_grip
+            * surface.lateral_grip
+            * lateral_grip_multiplier
+            * dt;
         car.velocity *= 1.0 / (1.0 + tuning.drag * surface.drag * surface.rolling_resistance * dt);
 
         let capped_forward_speed = car
