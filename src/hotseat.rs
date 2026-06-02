@@ -13,21 +13,21 @@ impl Plugin for HotseatPlugin {
 }
 
 #[derive(Clone, Debug)]
-pub struct Player {
-    pub name: String,
+struct Player {
+    name: String,
 }
 
 #[derive(Clone, Debug)]
-pub struct LeaderboardEntry {
-    pub player_name: String,
-    pub finish_time: f32,
+struct LeaderboardEntry {
+    player_name: String,
+    finish_time: f32,
 }
 
 #[derive(Resource, Debug)]
 pub struct HotseatSession {
-    pub players: Vec<Player>,
-    pub current_player: usize,
-    pub leaderboard: Vec<LeaderboardEntry>,
+    players: Vec<Player>,
+    current_player: usize,
+    leaderboard: Vec<LeaderboardEntry>,
 }
 
 impl Default for HotseatSession {
@@ -52,8 +52,14 @@ impl HotseatSession {
         &self.players[self.current_player].name
     }
 
-    pub fn best_entry(&self) -> Option<&LeaderboardEntry> {
-        self.leaderboard.first()
+    pub fn player_count(&self) -> usize {
+        self.players.len()
+    }
+
+    pub fn best_summary(&self) -> Option<(&str, f32)> {
+        self.leaderboard
+            .first()
+            .map(|entry| (entry.player_name.as_str(), entry.finish_time))
     }
 
     fn add_player(&mut self) {
@@ -104,8 +110,5 @@ fn hotseat_controls(
     run.reset();
 
     let (transform, car) = &mut *car;
-    **car = PlayerCar::default();
-    transform.translation = car_spawn.translation;
-    transform.rotation = Quat::from_rotation_y(car_spawn.yaw);
-    car.yaw = car_spawn.yaw;
+    car.reset_to_spawn(transform, *car_spawn);
 }

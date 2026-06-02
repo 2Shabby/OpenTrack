@@ -48,8 +48,8 @@ fn update_debug_overlay(
 ) {
     let params = surfaces.get(car.current_surface);
     let best = hotseat
-        .best_entry()
-        .map(|entry| format!("{} {:.2}", entry.player_name, entry.finish_time))
+        .best_summary()
+        .map(|(name, finish_time)| format!("{name} {finish_time:.2}"))
         .unwrap_or_else(|| "none".to_string());
     let ghost_best = ghost
         .finish_time()
@@ -62,7 +62,7 @@ fn update_debug_overlay(
         track.piece_count,
         track.checkpoint_count,
         hotseat.active_player_name(),
-        hotseat.players.len(),
+        hotseat.player_count(),
         best,
         ghost_best,
         run.elapsed,

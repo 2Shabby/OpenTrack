@@ -20,6 +20,12 @@ impl Default for CarSpawn {
     }
 }
 
+impl CarSpawn {
+    pub fn rotation(self) -> Quat {
+        Quat::from_rotation_y(self.yaw)
+    }
+}
+
 pub struct DrivingPlugin;
 
 impl Plugin for DrivingPlugin {
@@ -89,6 +95,15 @@ impl Default for PlayerCar {
     }
 }
 
+impl PlayerCar {
+    pub fn reset_to_spawn(&mut self, transform: &mut Transform, car_spawn: CarSpawn) {
+        *self = Self::default();
+        self.yaw = car_spawn.yaw;
+        transform.translation = car_spawn.translation;
+        transform.rotation = car_spawn.rotation();
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DriveMode {
     Forward,
@@ -124,10 +139,7 @@ fn drive_car(
 
     for (mut transform, mut car) in &mut cars {
         if keys.just_pressed(KeyCode::KeyR) {
-            *car = PlayerCar::default();
-            transform.translation = car_spawn.translation;
-            transform.rotation = Quat::from_rotation_y(car_spawn.yaw);
-            car.yaw = car_spawn.yaw;
+            car.reset_to_spawn(&mut transform, *car_spawn);
         }
 
         let controls = read_controls(&keys);

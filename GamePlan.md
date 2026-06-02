@@ -475,6 +475,7 @@ Procedural assembly has started:
 * Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
 * Shared spatial types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
 * Surface zones, rail colliders, triggers, and track pieces no longer carry parallel center/yaw/extent conventions.
+* Physics query results, hotseat state, ghost samples, and car reset semantics have been narrowed to the minimum current API.
 * The generated track keeps one checkpoint and one finish for the current run-loop contract.
 * Debug overlay shows generated seed and piece count.
 

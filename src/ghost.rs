@@ -26,16 +26,16 @@ impl Plugin for GhostPlugin {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct GhostSample {
-    pub time: f32,
-    pub translation: Vec3,
-    pub yaw: f32,
+struct GhostSample {
+    time: f32,
+    translation: Vec3,
+    yaw: f32,
 }
 
 #[derive(Clone, Debug)]
-pub struct GhostReplay {
-    pub finish_time: f32,
-    pub samples: Vec<GhostSample>,
+struct GhostReplay {
+    finish_time: f32,
+    samples: Vec<GhostSample>,
 }
 
 #[derive(Resource, Default)]
