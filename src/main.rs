@@ -28,7 +28,6 @@ fn main() {
     App::new()
         .insert_resource(ClearColor(Color::srgb(0.04, 0.05, 0.055)))
         .insert_resource(Time::<Fixed>::from_hz(60.0))
-        .init_state::<game_state::GameState>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Open Track Turbo".to_string(),
@@ -36,6 +35,7 @@ fn main() {
             }),
             ..default()
         }))
+        .init_state::<game_state::GameState>()
         .add_plugins((
             SurfacePlugin,
             PhysicsQueriesPlugin,
