@@ -37,7 +37,7 @@ pub(super) fn toggle_from_keyboard(keys: Res<ButtonInput<KeyCode>>, mut pause: R
 pub(super) fn sync_menu(
     mut commands: Commands,
     pause: Res<PauseState>,
-    menu: Query<Entity, With<PauseMenuEntity>>,
+    menu: Query<Entity, (With<PauseMenuEntity>, Without<ChildOf>)>,
 ) {
     if !pause.is_changed() {
         return;
@@ -95,7 +95,10 @@ pub(super) fn handle_menu(
     }
 }
 
-pub(super) fn despawn(mut commands: Commands, entities: Query<Entity, With<PauseMenuEntity>>) {
+pub(super) fn despawn(
+    mut commands: Commands,
+    entities: Query<Entity, (With<PauseMenuEntity>, Without<ChildOf>)>,
+) {
     for entity in &entities {
         commands.entity(entity).despawn();
     }

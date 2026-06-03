@@ -71,7 +71,10 @@ pub(super) fn handle(
     }
 }
 
-pub(super) fn despawn(mut commands: Commands, entities: Query<Entity, With<MainMenuEntity>>) {
+pub(super) fn despawn(
+    mut commands: Commands,
+    entities: Query<Entity, (With<MainMenuEntity>, Without<ChildOf>)>,
+) {
     for entity in &entities {
         commands.entity(entity).despawn();
     }

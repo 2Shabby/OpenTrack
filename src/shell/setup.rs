@@ -158,7 +158,10 @@ pub(super) fn update_values(setup: Res<SessionSetup>, mut values: Query<(&mut Te
     }
 }
 
-pub(super) fn despawn(mut commands: Commands, entities: Query<Entity, With<SetupEntity>>) {
+pub(super) fn despawn(
+    mut commands: Commands,
+    entities: Query<Entity, (With<SetupEntity>, Without<ChildOf>)>,
+) {
     for entity in &entities {
         commands.entity(entity).despawn();
     }

@@ -22,7 +22,6 @@ const BODY_PITCH_RATE: f32 = 0.05;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
 const FRONT_WHEEL_MAX_STEER: f32 = 0.42;
 const ASSET_WHEEL_SPIN_RATE: f32 = 2.0;
-const ASSET_WHEEL_STEER_SIGN: f32 = -1.0;
 
 #[derive(Clone, Copy, Resource)]
 pub struct CarSpawn {
@@ -342,7 +341,7 @@ fn update_imported_wheel_visuals(
 
 fn asset_wheel_steer(wheel_steer_angle: f32, role: AssetWheelRole) -> f32 {
     match role {
-        AssetWheelRole::Front => wheel_steer_angle * ASSET_WHEEL_STEER_SIGN,
+        AssetWheelRole::Front => wheel_steer_angle,
         AssetWheelRole::Rear => 0.0,
     }
 }
@@ -395,9 +394,9 @@ mod tests {
     }
 
     #[test]
-    fn imported_front_wheels_convert_gameplay_steer_to_asset_axis() {
-        assert!(asset_wheel_steer(0.42, AssetWheelRole::Front) < 0.0);
-        assert!(asset_wheel_steer(-0.42, AssetWheelRole::Front) > 0.0);
+    fn imported_front_wheels_use_gameplay_steer_direction() {
+        assert!(asset_wheel_steer(0.42, AssetWheelRole::Front) > 0.0);
+        assert!(asset_wheel_steer(-0.42, AssetWheelRole::Front) < 0.0);
         assert_eq!(asset_wheel_steer(1.0, AssetWheelRole::Rear), 0.0);
     }
 
@@ -405,8 +404,8 @@ mod tests {
     fn imported_wheel_rotation_points_with_steer_direction() {
         let right_steer = asset_wheel_steer(0.42, AssetWheelRole::Front);
         let left_steer = asset_wheel_steer(-0.42, AssetWheelRole::Front);
-        let right = asset_wheel_rotation(Quat::IDENTITY, right_steer, 0.0) * -Vec3::Z;
-        let left = asset_wheel_rotation(Quat::IDENTITY, left_steer, 0.0) * -Vec3::Z;
+        let right = asset_wheel_rotation(Quat::IDENTITY, right_steer, 0.0) * Vec3::Z;
+        let left = asset_wheel_rotation(Quat::IDENTITY, left_steer, 0.0) * Vec3::Z;
 
         assert!(right.x > 0.0);
         assert!(left.x < 0.0);
