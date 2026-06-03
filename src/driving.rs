@@ -22,7 +22,7 @@ const BODY_VISUAL_HEIGHT: f32 = 0.0;
 const FRONT_WHEEL_MAX_STEER: f32 = 0.42;
 const ASSET_WHEEL_SPIN_RATE: f32 = 2.0;
 const CAR_COLLISION_SKIN: f32 = 0.02;
-const WHEEL_CONTACT_COUNT: usize = 4;
+const WHEEL_CONTACT_COUNT: usize = model::WHEEL_COUNT;
 const WHEEL_CONTACT_LABELS: [&str; WHEEL_CONTACT_COUNT] = ["FL", "FR", "RL", "RR"];
 
 #[derive(Clone, Copy, Resource)]
@@ -186,20 +186,14 @@ impl WheelContacts {
     }
 
     pub fn friction(self, surfaces: &SurfaceLibrary) -> model::SurfaceFriction {
-        let (longitudinal, lateral) =
-            self.contacts
-                .iter()
-                .fold((0.0, 0.0), |(longitudinal, lateral), contact| {
-                    let surface = surfaces.get(contact.surface);
-                    (
-                        longitudinal + surface.longitudinal_friction,
-                        lateral + surface.lateral_friction,
-                    )
-                });
-        let count = self.contacts.len() as f32;
         model::SurfaceFriction {
-            longitudinal: longitudinal / count,
-            lateral: lateral / count,
+            wheels: self.contacts.map(|contact| {
+                let surface = surfaces.get(contact.surface);
+                model::WheelFriction {
+                    longitudinal: surface.longitudinal_friction,
+                    lateral: surface.lateral_friction,
+                }
+            }),
         }
     }
 
@@ -253,7 +247,6 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
         let intent =
             model::ControlIntent::from_input(&ctx.tuning, input, &basis, FRONT_WHEEL_MAX_STEER);
         car.drive_mode = intent.drive_mode;
-        car.handling_state = model::handling_state(&ctx.tuning, &basis);
         car.wheel_steer_angle = intent.wheel_steer_angle;
         let tire_forces = model::tire_forces(
             &ctx.tuning,
@@ -264,6 +257,7 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
             contact_friction,
         );
         car.tire_forces = tire_forces;
+        car.handling_state = tire_forces.handling_state;
         car.yaw += tire_forces.yaw_delta * dt;
         car.velocity += tire_forces.acceleration * dt;
 

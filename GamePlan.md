@@ -118,9 +118,9 @@ Replace:
 Add:
 
 * deterministic mass, gravity, wheelbase, track width, center-of-gravity height, and front/rear weight distribution
-* static and first-pass dynamic load transfer for acceleration, braking, and cornering
+* static and first-pass axle load transfer for acceleration, braking, and cornering
 * combined longitudinal/lateral friction budget per surface
-* explicit debug values for normal load, tire force, friction limit, slip angle, and saturation
+* explicit debug values for normal load, axle tire force, friction limit, slip angle, and saturation
 * optional tune curves for slip-to-force and drift breakaway/recovery
 
 Avoid:
@@ -190,27 +190,33 @@ Recent fixes:
 * replaced direct acceleration/lateral damping with a deterministic tire-force integration result
 * converted surface handling fields from arcade multipliers to friction, rolling resistance, aerodynamic drag, and boost acceleration
 * added tire-force debug output and tests for surface grip and coasting resistance
+* split tire-force output into front/rear axle load, lateral force, and saturation terms
+* changed grip/sliding transitions to saturation breakaway/recovery with hysteresis
+* extended debug output and tests for axle loads, axle saturation, and rear-surface grip loss
+* changed wheel contacts from axle-average friction to four explicit FL/FR/RL/RR friction inputs
+* added per-wheel normal load, lateral force, and saturation outputs
+* replaced the fixed lateral-force split with steering-angle-aware front/rear demand
 
 ## Pending Work
 
 Driving audit notes:
 
-* `driving.rs` now consumes one tire-force result, but `WheelContacts` still averages surface friction equally.
-* `driving/model.rs` now owns the force/yaw result, but the next pass should split front/rear tires instead of using one aggregate load.
+* `driving.rs` now samples four logical wheel contacts and passes per-wheel friction into the force model.
+* `driving/model.rs` now owns force, yaw, saturation state, per-wheel loads, and steering-aware front/rear lateral demand.
 * `surface.rs` now stores friction/resistance terms; add tune curves only after stable slip and saturation inputs exist.
-* `debug.rs` now shows aggregate tire-force values; extend it after front/rear or per-wheel outputs exist.
+* `debug.rs` shows aggregate and axle tire-force values; add a visual force/contact overlay only when runtime tuning needs it.
 
 Highest priority:
 
-1. Add per-wheel normal-load aggregation instead of current aggregate contact friction averaging.
-2. Split tire-force output into front/rear load and force terms so yaw response depends on front steering saturation and rear slip.
-3. Add drift breakaway/recovery thresholds from tire saturation rather than the current slip-angle-only state.
-4. Add tests that prove per-surface saturation and front/rear load transfer change handling predictably.
-5. Evaluate `bevy_lookup_curve` only after stable slip, saturation, and yaw-response scalar inputs exist.
+1. Add tune curves for slip-to-force and drift yaw response once the scalar inputs are stable.
+2. Add a compact debug/tuning UI for tire forces and surface parameters, likely via `bevy_egui`.
+3. Evaluate `bevy_lookup_curve` for tire-force and yaw-response curves before handrolling curve interpolation.
+4. Add a visual wheel-contact and force overlay if the text debug view is not enough for tuning.
+5. Tune per-surface friction, rolling resistance, and drift breakaway values against actual gameplay feel.
 
 Next:
 
-6. Add a richer debug primitive overlay for road mesh vertices, road collider mesh vertices, rail paths, and trigger normals.
+6. Add a richer debug primitive overlay for wheel contacts, road collider mesh vertices, rail paths, and trigger normals.
 7. Add a debug-only imported vehicle node/axis inspector only if future assets make wheel axes ambiguous.
 8. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
 9. Add banked track frames after the flat road/rail/contact pipeline is coherent.

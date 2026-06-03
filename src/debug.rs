@@ -94,7 +94,7 @@ fn update_debug_overlay(
         .unwrap_or_else(|| "none".to_string());
 
     overlay.0.0 = format!(
-        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nhandling: {}\nslip: {:>4.0} deg\nground: {} {}\nwheels: {}\nsplit: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nnormal: {:>6.0}\nfriction: {:>6.0}\nlong force: {:+6.0}\nlat force: {:+6.0}\nsaturation: {:.2}",
+        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nhandling: {}\nslip: {:>4.0} deg\nground: {} {}\nwheels: {}\nsplit: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nload all/f/r: {:>5.0}/{:>5.0}/{:>5.0}\nload wheels: {:>4.0}/{:>4.0}/{:>4.0}/{:>4.0}\nfriction: {:>6.0}\nlong force: {:+6.0}\nlat all/f/r: {:+6.0}/{:+6.0}/{:+6.0}\nlat wheels: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\nsat f/r/all: {:.2}/{:.2}/{:.2}\nsat wheels: {:.2}/{:.2}/{:.2}/{:.2}",
         snapshot.track.seed,
         snapshot.track.piece_count,
         snapshot.track.checkpoint_count,
@@ -124,10 +124,28 @@ fn update_debug_overlay(
         car.throttle,
         car.steer,
         car.tire_forces.normal_load,
+        car.tire_forces.front_normal_load,
+        car.tire_forces.rear_normal_load,
+        car.tire_forces.wheel_normal_loads[0],
+        car.tire_forces.wheel_normal_loads[1],
+        car.tire_forces.wheel_normal_loads[2],
+        car.tire_forces.wheel_normal_loads[3],
         car.tire_forces.friction_limit,
         car.tire_forces.longitudinal_force,
         car.tire_forces.lateral_force,
+        car.tire_forces.front_lateral_force,
+        car.tire_forces.rear_lateral_force,
+        car.tire_forces.wheel_lateral_forces[0],
+        car.tire_forces.wheel_lateral_forces[1],
+        car.tire_forces.wheel_lateral_forces[2],
+        car.tire_forces.wheel_lateral_forces[3],
+        car.tire_forces.front_saturation,
+        car.tire_forces.rear_saturation,
         car.tire_forces.saturation,
+        car.tire_forces.wheel_saturations[0],
+        car.tire_forces.wheel_saturations[1],
+        car.tire_forces.wheel_saturations[2],
+        car.tire_forces.wheel_saturations[3],
     );
 }
 
