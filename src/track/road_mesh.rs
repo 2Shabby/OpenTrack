@@ -3,31 +3,23 @@ use bevy::prelude::*;
 use bevy_procedural_meshes::PMesh;
 
 use super::generation::PathFrame;
+use super::path_geometry::{polygon_points, road_polygon};
 
 pub fn road_surface_mesh(frames: &[PathFrame], width: f32) -> Mesh {
     let mut mesh = PMesh::<u32>::new();
-    let half_width = width * 0.5;
+    let polygon = road_polygon(frames, width);
 
     mesh.fill(0.01, |builder| {
-        let mut left_edges = Vec::with_capacity(frames.len());
-        let mut right_edges = Vec::with_capacity(frames.len());
+        let points = polygon_points(&polygon);
+        let Some(first) = points.first().copied() else {
+            return;
+        };
 
-        for frame in frames {
-            let right = frame.pose.right();
-            left_edges.push(frame.pose.position - right * half_width);
-            right_edges.push(frame.pose.position + right * half_width);
+        builder.begin(first);
+        for point in points.into_iter().skip(1) {
+            builder.line_to(point);
         }
-
-        if let Some(first_left) = left_edges.first().copied() {
-            builder.begin(first_left);
-            for right_edge in right_edges {
-                builder.line_to(right_edge);
-            }
-            for left_edge in left_edges.into_iter().rev() {
-                builder.line_to(left_edge);
-            }
-            builder.close();
-        }
+        builder.close();
     });
 
     mesh.flip_yz().to_bevy(RenderAssetUsages::default())

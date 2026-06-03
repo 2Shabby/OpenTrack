@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use super::generation::{PathFrame, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece, TrackPieceKind};
+use super::path_geometry::{line_path, line_segments, road_edges};
 use crate::geometry::{OrientedRect, Pose2};
 use crate::surface::SurfaceKind;
 
@@ -44,9 +45,10 @@ impl TrackPiece {
             .windows(2)
             .map(|pair| road_span([pair[0], pair[1]], self.surface))
             .collect();
-        let rails = roads
-            .iter()
-            .flat_map(|road| [-1.0, 1.0].map(|side| rail_span(*road, side)))
+        let edges = road_edges(&self.frames, TRACK_WIDTH + RAIL_THICKNESS);
+        let rails = rail_spans_for_boundary(&edges.left)
+            .into_iter()
+            .chain(rail_spans_for_boundary(&edges.right))
             .collect();
 
         TrackPieceGeometry {
@@ -89,13 +91,23 @@ fn road_span(frames: [PathFrame; 2], surface: SurfaceKind) -> TrackRoadSpan {
     }
 }
 
-fn rail_span(road: TrackRoadSpan, side: f32) -> TrackRailSpan {
-    let local = Vec2::new(side * (TRACK_WIDTH * 0.5 + RAIL_THICKNESS * 0.5), 0.0);
-    let pose = Pose2::new(road.bounds.pose.local_to_world(local), road.bounds.pose.yaw);
+fn rail_spans_for_boundary(points: &[Vec2]) -> Vec<TrackRailSpan> {
+    line_segments(&line_path(points))
+        .into_iter()
+        .map(rail_span)
+        .collect()
+}
+
+fn rail_span(segment: [Vec2; 2]) -> TrackRailSpan {
+    let [start, end] = segment;
+    let delta = end - start;
+    let length = delta.length();
+    let yaw = delta.x.atan2(delta.y);
+    let pose = Pose2::new((start + end) * 0.5, yaw);
 
     TrackRailSpan {
-        bounds: OrientedRect::new(pose, Vec2::new(RAIL_THICKNESS * 0.5, road.length * 0.5)),
-        length: road.length,
+        bounds: OrientedRect::new(pose, Vec2::new(RAIL_THICKNESS * 0.5, length * 0.5)),
+        length,
     }
 }
 

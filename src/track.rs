@@ -1,5 +1,6 @@
 mod generation;
 mod markers;
+mod path_geometry;
 mod piece;
 mod road_mesh;
 mod scenery;

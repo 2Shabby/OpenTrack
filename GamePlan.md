@@ -442,7 +442,8 @@ Dependency policy:
 
 Current crate audit direction:
 
-* Use Bevy's built-in curve/spline APIs first for centerline representation if they can replace custom arc sampling without fighting track validation.
+* Use Bevy's built-in curve/spline APIs for centerline sampling while keeping project-owned route validation.
+* Use `kurbo` for shared 2D path vocabulary and boundary/polygon extraction so road surfaces, rails, and future colliders derive from the same path model.
 * Use `bevy_procedural_meshes 0.18` for road mesh tessellation before adding more custom mesh builders.
 * Evaluate `bevy_lookup_curve` for editable tuning curves once handling values move out of hard-coded constants.
 * Avoid KCC-focused crates as vehicle-controller replacements unless the car becomes a kinematic-body problem; current arcade handling still needs a custom yaw/velocity model.
@@ -451,7 +452,7 @@ Crate swap audit:
 
 * `bevy::math::cubic_splines` / `bevy::math::curve`: strong candidate for replacing bespoke centerline sampling once track pieces move from constant arcs to spline-authored paths. This should be tried before adding a separate spline crate.
 * `bevy_procedural_meshes 0.18`: adopted for current road surface tessellation through its Lyon-backed `PMesh::fill` path.
-* `kurbo`: strong candidate for non-Bevy 2D path vocabulary, arc/Bezier flattening, path simplification, and offset/stroke geometry. Prefer this if Bevy curves are insufficient for validation or offset-curve work.
+* `kurbo`: adopted for non-Bevy 2D path vocabulary, road polygons, boundary paths, line extraction, and future arc/Bezier flattening or offset/stroke geometry.
 * `lyon` / `lyon_tessellation`: useful as direct lower-level tools only if future road pieces need tessellation control that `bevy_procedural_meshes` does not expose.
 * `rstar`: strong candidate for replacing O(n^2) overlap scans once piece counts grow. It does not replace SAT/geometry correctness, but it should narrow candidate overlap checks efficiently.
 * `bevy_lookup_curve`: useful for tuning/feel curves, not track generation. Add when acceleration/grip/steering/drift values move from constants to data.
@@ -461,9 +462,9 @@ Crate audit pass results:
 
 * There is no obvious Bevy crate that replaces the whole generated racing-track problem end to end. The useful crates are lower-level: curve representation, path flattening/stroking, tessellation, spatial indexing, and tuning curves.
 * The current code should therefore keep a small project-owned track contract and replace the most error-prone internals behind it instead of moving generation ownership wholesale to one crate.
-* The first swap should be path representation, not mesh output. If the centerline abstraction is wrong, every mesh/collider/trigger crate integration will inherit that mismatch.
-* Bevy built-in curves are the first candidate because they are already in the engine dependency and match Bevy 0.18.1. Use them to prototype `TrackPath` as sampled frames generated from curve primitives.
-* `kurbo` is the next path-vocabulary candidate if Bevy curves do not give enough 2D path operations for road edge offsets, flattening tolerance, or future Bezier/arc authoring.
+* The first swap is path representation, not mesh output. If the centerline abstraction is wrong, every mesh/collider/trigger crate integration will inherit that mismatch.
+* Bevy built-in curves remain the centerline sampling backend because they are already in the engine dependency and match Bevy 0.18.1.
+* `kurbo` now owns the shared 2D path vocabulary around sampled frames: road edge construction, road polygons, boundary paths, and future flattening/offset/stroke operations.
 * `lyon_tessellation` is the robust low-level tessellation candidate when road surfaces stop being simple strips. It is most valuable for fills/strokes, joins, caps, and non-rectangular future pieces.
 * `bevy_procedural_meshes` targets Bevy 0.18 and already depends optionally on `lyon`; current road surface generation now uses it as the single mesh path instead of maintaining hand-built strip mesh code.
 * `rstar` should replace broad-phase overlap scanning once generator piece counts or candidate retries grow. It should not replace project geometry correctness; it only narrows which road spans reach SAT validation.
@@ -476,7 +477,7 @@ Crate swap order:
 1. Introduce a project-owned `TrackPath` abstraction that produces `PathFrame` samples and can be backed first by current arcs, then by Bevy curves. Done.
 2. Replace constant-arc generation with Bevy curve-backed sampling for the same straight/curve pieces, keeping validation and generated output shape unchanged. Done.
 3. Use `bevy_procedural_meshes` as the current road-surface tessellation path.
-4. If future curved/widened/branched road pieces need stronger path operations, spike `kurbo + lyon_tessellation` for path flattening, edge construction, and road-surface triangulation.
+4. Adopt `kurbo` for path/edge/polygon extraction before expanding curved rail and collider work. Done.
 5. Add `rstar` broad-phase indexing after generation supports larger routes or if overlap validation starts dominating retries.
 6. Move vehicle feel constants to tuning assets and evaluate `bevy_lookup_curve` for non-linear speed/grip/steering response curves.
 
@@ -589,7 +590,7 @@ Completed recent code changes:
 18. Split track generation into route assembly, primitive path generation, shared generation types, and validation modules.
 19. Started a crate swap audit for Bevy curves, procedural mesh generation, path geometry, tessellation, spatial indexing, and tuning curves.
 20. Identified path representation, mesh generation, and spatial broad-phase as the highest-value crate swap points.
-21. Added a `TrackPath` sampling boundary so future Bevy curve or `kurbo` experiments can replace path internals without changing track pieces, meshes, colliders, rails, or triggers.
+21. Added a `TrackPath` sampling boundary so Bevy curve sampling and `kurbo` path geometry can evolve without changing track pieces, meshes, colliders, rails, or triggers.
 22. Replaced manual straight/arc frame sampling internals with Bevy's built-in curve API while preserving the current `PathFrame` output contract.
 23. Replaced the hand-built road strip mesh indices with `bevy_procedural_meshes` / Lyon fill tessellation as the single road surface mesh path.
 24. Split shell UI code by screen/flow: main menu, setup, results, and pause.
@@ -598,21 +599,21 @@ Completed recent code changes:
 27. Removed generation presets from the setup UI; there is one generation mode controlled by seed and length.
 28. Moved overlap fitting to planner-owned occupied sectors instead of low-level road rectangle SAT checks.
 29. Removed silent alternate track generation; planner failure is explicit during development.
+30. Added `kurbo` as the shared 2D path layer for road polygons, boundary extraction, and rail span derivation from boundary paths.
 
 Next code changes:
 
 1. Fix `Driving -> Setup` transition cleanup so pause/menu UI and driving scene state cannot leak into setup.
-2. Replace per-segment cuboid rails/colliders with path-derived continuous edge primitives for curves.
-3. Remove rails at surface-transition seams unless the section edge is a real track boundary.
-4. Add dedicated road/rail primitive validation that compares generated mesh edges, collider spans, and trigger normals for each section.
+2. Replace per-segment cuboid rail colliders with path-derived continuous edge collision primitives for curves.
+3. Classify true section boundaries versus internal seams so rails never appear at surface-transition seams.
+4. Add dedicated road/rail primitive validation that compares generated mesh edges, boundary paths, collider spans, and trigger normals for each section.
 5. Replace hard-coded candidate lists with piece metadata, connection rules, and candidate weighting.
-6. Audit whether `kurbo` should own future 2D path offset/flattening once road pieces need more than frame-derived polygons.
-7. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
-8. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
-9. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
-10. Improve setup/results/pause UI polish within the current screen modules instead of rebuilding the shell architecture.
-11. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
-12. Keep player-profile and persistence work deferred until generation and physics-query stability improve.
+6. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
+7. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
+8. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
+9. Improve setup/results/pause UI polish within the current screen modules instead of rebuilding the shell architecture.
+10. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
+11. Keep player-profile and persistence work deferred until generation and physics-query stability improve.
 
 ## Current Audit: Shell Flow and Curved Track Primitives
 
@@ -694,11 +695,8 @@ Then:
 Current crates already cover part of the fix:
 
 * `bevy_procedural_meshes` is still appropriate for road-surface tessellation because it builds Bevy meshes from Lyon-backed 2D fills.
+* `kurbo` now owns the local 2D path vocabulary used to turn sampled path frames into road polygons and boundary paths.
 * Avian should remain the physics backend. It already supports project-owned query adapters and mesh/collider primitives; swapping physics crates is not the first fix.
-
-Likely useful crate addition:
-
-* `kurbo` is the strongest candidate for robust 2D path vocabulary: arcs, Bezier paths, flattening, stroking, offset curves, and path expansion. Its docs expose `Stroke`, path stroking, flattening, and offset modules. Use it if boundary extraction and offset rails become awkward with hand-written sampled-frame math.
 
 Likely not worth adding yet:
 
@@ -709,12 +707,12 @@ Likely not worth adding yet:
 Implementation order:
 
 1. Fix shell transition cleanup.
-2. Introduce boundary extraction from `TrackPath` frames: left edge, right edge, start edge, end edge.
+2. Finish boundary extraction from `TrackPath` frames: left edge, right edge, start edge, end edge.
 3. Classify which boundaries receive rails. Adjacent piece seams and surface seams do not get rails.
 4. Generate rail visuals from boundary paths, not from every road span.
 5. Generate rail colliders from the same boundary paths. Start with dense short colliders derived from boundary samples, then replace with a mesh/polyline collider if Avian integration proves stable.
-6. Add primitive validation for boundary continuity and “no rail on internal seam.”
-7. Add `kurbo` only if edge offset/stroking logic starts duplicating path-geometry work.
+6. Add primitive validation for boundary continuity and no rail on internal seams.
+7. Use `kurbo` flattening/offset/stroke APIs when rail or collider generation needs more than sampled line segments.
 
 ## Current Code Slice
 
@@ -732,8 +730,9 @@ Procedural assembly has started:
 * Road colliders and rails are generated per sampled path segment, not per whole piece rectangle.
 * Each path segment now owns road surface bounds and optional rail bounds from one primitive.
 * Track code is split into route generation, piece geometry, mesh spawning, validation, path primitives, shared generation types, and scenery modules.
-* Track path generation now goes through `TrackPath`, which samples straight and constant-arc paths through Bevy's curve API into `PathFrame`s and is the intended seam for future `kurbo` replacement if Bevy curves become insufficient.
-* Road surface visuals now use `bevy_procedural_meshes` fill tessellation from generated path-frame edge polygons instead of hand-built triangle indices.
+* Track path generation now goes through `TrackPath`, which samples straight and constant-arc paths through Bevy's curve API into `PathFrame`s.
+* Road surface visuals now use `bevy_procedural_meshes` fill tessellation from `kurbo` road polygons instead of hand-built triangle indices.
+* Road boundary extraction now goes through `kurbo` path helpers so meshes, rails, and future colliders can derive from the same left/right edge paths.
 * Generated scene entities are tagged by semantic role: environment, scenery, road surface, rail, trigger, player, camera, and lighting.
 * Shared geometry types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
 * Road colliders, rail colliders, triggers, and track pieces no longer carry parallel center/yaw/extent conventions.
