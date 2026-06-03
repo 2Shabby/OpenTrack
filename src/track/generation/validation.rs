@@ -42,7 +42,7 @@ pub fn validate_track_pieces(pieces: &[TrackPiece]) -> Result<(), String> {
         piece_count: pieces.len(),
         checkpoint_count: TrackPiece::checkpoint_count(pieces),
         road_surface_count: pieces.len(),
-        rail_count: pieces.iter().map(TrackPiece::rail_count).sum(),
+        rail_count: TrackPiece::rail_count(pieces),
         trigger_count: TrackPiece::trigger_count(pieces),
     };
 
@@ -100,12 +100,27 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
         }
     }
 
-    if geometry.rails.len() != geometry.roads.len() * 2 {
+    if geometry.rails.len() != 2 {
         return Err(format!(
-            "piece {index} has {} rail spans for {} road spans",
+            "piece {index} has {} rail paths, expected 2",
             geometry.rails.len(),
-            geometry.roads.len()
         ));
+    }
+    for (rail_index, rail) in geometry.rails.iter().enumerate() {
+        if rail.points.len() != piece.frames.len() {
+            return Err(format!(
+                "piece {index} rail {rail_index} has {} points for {} frames",
+                rail.points.len(),
+                piece.frames.len()
+            ));
+        }
+        for (segment_index, pair) in rail.points.windows(2).enumerate() {
+            if pair[0].distance(pair[1]) <= 0.001 {
+                return Err(format!(
+                    "piece {index} rail {rail_index} segment {segment_index} has nonpositive length"
+                ));
+            }
+        }
     }
 
     if let Some(trigger) = geometry.trigger {

@@ -8,15 +8,16 @@ use super::markers::{
     GeneratedRail, GeneratedRoadSurface, GeneratedTrigger, SpawnedCamera, SpawnedLighting,
     SpawnedPlayer, SpawnedSceneEntity,
 };
-use super::piece::{TrackPieceMarker, TrackRailSpan, TrackRoadSpan, TrackTriggerLine};
+use super::path_geometry::{line_path, line_segments, road_edges};
+use super::piece::{TrackPieceMarker, TrackRailSpan, TrackTriggerLine};
 use super::road_mesh::road_surface_mesh;
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::VehicleSelection;
 use crate::driving::{CarSpawn, ChaseCamera, PlayerCar, VehicleSceneRoot};
 use crate::geometry::{forward_3d, xz_translation, yaw_rotation};
 use crate::physics::{
-    RailCollider, RoadCollider, rail_collider, rail_collision_layers, road_collider,
-    road_collision_layers, static_rigid_body,
+    RailCollider, RoadCollider, rail_collision_layers, rail_path_collider, road_collision_layers,
+    road_mesh_collider, static_rigid_body,
 };
 use crate::run::{TrackTrigger, TrackTriggerKind};
 use crate::surface::SurfaceKind;
@@ -49,6 +50,7 @@ pub fn spawn_generated_track(
     for piece in pieces.iter() {
         spawn_piece(&mut commands, &mut meshes, &mut materials, piece);
     }
+    spawn_track_rails(&mut commands, &mut meshes, &mut materials, &pieces);
 
     commands.insert_resource(track_info);
     commands.insert_resource(car_spawn);
@@ -69,23 +71,11 @@ fn spawn_piece(
         perceptual_roughness: 0.92,
         ..default()
     });
-    let rail_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.11, 0.12, 0.12),
-        perceptual_roughness: 0.7,
-        ..default()
-    });
 
     let geometry = piece.geometry();
 
     spawn_road_surface(commands, meshes, piece, road_material);
-
-    for road in geometry.roads {
-        spawn_road_collider(commands, road);
-    }
-
-    for rail in geometry.rails {
-        spawn_rail_span(commands, meshes, rail, rail_material.clone());
-    }
+    spawn_road_collider(commands, piece);
 
     spawn_trigger(commands, meshes, materials, geometry.trigger);
 }
@@ -105,16 +95,17 @@ fn spawn_road_surface(
     ));
 }
 
-fn spawn_road_collider(commands: &mut Commands, road: TrackRoadSpan) {
+fn spawn_road_collider(commands: &mut Commands, piece: &TrackPiece) {
+    let (vertices, indices) = road_collider_mesh(&piece.frames);
+
     commands.spawn((
-        Transform::from_translation(xz_translation(road.bounds.pose.position, -0.04))
-            .with_rotation(yaw_rotation(road.bounds.pose.yaw)),
+        Transform::default(),
         RoadCollider {
-            surface: road.surface,
+            surface: piece.surface,
         },
         static_rigid_body(),
         road_collision_layers(),
-        road_collider(TRACK_WIDTH, 0.08, road.length),
+        road_mesh_collider(vertices, indices),
         SpawnedSceneEntity,
     ));
 }
@@ -125,20 +116,116 @@ fn spawn_rail_span(
     rail: TrackRailSpan,
     rail_material: Handle<StandardMaterial>,
 ) {
+    spawn_rail_collider(commands, &rail);
+
+    for segment in line_segments(&line_path(&rail.points)) {
+        spawn_rail_segment_visual(commands, meshes, segment, rail_material.clone());
+    }
+}
+
+fn spawn_track_rails(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    pieces: &[TrackPiece],
+) {
+    let rail_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.11, 0.12, 0.12),
+        perceptual_roughness: 0.7,
+        ..default()
+    });
+
+    for rail in track_rail_paths(pieces) {
+        spawn_rail_span(commands, meshes, rail, rail_material.clone());
+    }
+}
+
+fn track_rail_paths(pieces: &[TrackPiece]) -> Vec<TrackRailSpan> {
+    let mut left = Vec::new();
+    let mut right = Vec::new();
+
+    for piece in pieces {
+        let edges = road_edges(&piece.frames, TRACK_WIDTH + RAIL_THICKNESS);
+        append_connected_points(&mut left, edges.left);
+        append_connected_points(&mut right, edges.right);
+    }
+
+    [left, right]
+        .into_iter()
+        .filter(|points| points.len() >= 2)
+        .map(|points| TrackRailSpan { points })
+        .collect()
+}
+
+fn append_connected_points(path: &mut Vec<Vec2>, points: Vec<Vec2>) {
+    for point in points {
+        let duplicate_seam = path
+            .last()
+            .is_some_and(|previous| previous.distance(point) <= 0.001);
+        if !duplicate_seam {
+            path.push(point);
+        }
+    }
+}
+
+fn spawn_rail_collider(commands: &mut Commands, rail: &TrackRailSpan) {
+    let points = rail
+        .points
+        .iter()
+        .map(|point| xz_translation(*point, RAIL_HEIGHT * 0.5))
+        .collect::<Vec<_>>();
+
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, rail.length))),
-        MeshMaterial3d(rail_material),
-        Transform::from_translation(xz_translation(rail.bounds.pose.position, RAIL_HEIGHT * 0.5))
-            .with_rotation(yaw_rotation(rail.bounds.pose.yaw)),
-        RailCollider {
-            bounds: rail.bounds,
-        },
+        Transform::default(),
+        RailCollider,
         static_rigid_body(),
         rail_collision_layers(),
-        rail_collider(RAIL_THICKNESS, RAIL_HEIGHT, rail.length),
+        rail_path_collider(&points, RAIL_THICKNESS * 0.5),
         GeneratedRail,
         SpawnedSceneEntity,
     ));
+}
+
+fn spawn_rail_segment_visual(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    segment: [Vec2; 2],
+    rail_material: Handle<StandardMaterial>,
+) {
+    let [start, end] = segment;
+    let delta = end - start;
+    let length = delta.length();
+    let yaw = delta.x.atan2(delta.y);
+
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, length))),
+        MeshMaterial3d(rail_material),
+        Transform::from_translation(xz_translation((start + end) * 0.5, RAIL_HEIGHT * 0.5))
+            .with_rotation(yaw_rotation(yaw)),
+        SpawnedSceneEntity,
+    ));
+}
+
+fn road_collider_mesh(frames: &[super::generation::PathFrame]) -> (Vec<Vec3>, Vec<[u32; 3]>) {
+    let edges = road_edges(frames, TRACK_WIDTH);
+    let mut vertices = Vec::with_capacity(frames.len() * 2);
+    let mut indices = Vec::with_capacity(frames.len().saturating_sub(1) * 2);
+
+    for (left, right) in edges.left.into_iter().zip(edges.right) {
+        vertices.push(xz_translation(left, 0.0));
+        vertices.push(xz_translation(right, 0.0));
+    }
+
+    for segment in 0..frames.len().saturating_sub(1) {
+        let left = (segment * 2) as u32;
+        let right = left + 1;
+        let next_left = left + 2;
+        let next_right = left + 3;
+        indices.push([left, next_left, right]);
+        indices.push([right, next_left, next_right]);
+    }
+
+    (vertices, indices)
 }
 
 fn spawn_trigger(
@@ -243,5 +330,71 @@ fn surface_color(surface: SurfaceKind) -> Color {
         SurfaceKind::Ice => Color::srgb(0.62, 0.85, 0.9),
         SurfaceKind::Boost => Color::srgb(0.95, 0.67, 0.12),
         SurfaceKind::Grass => Color::srgb(0.16, 0.34, 0.13),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::geometry::Pose2;
+    use crate::track::generation::{PathFrame, TrackPieceKind};
+
+    #[test]
+    fn road_collider_mesh_accepts_ground_raycasts() {
+        let frames = [
+            PathFrame {
+                pose: Pose2::new(Vec2::ZERO, 0.0),
+            },
+            PathFrame {
+                pose: Pose2::new(Vec2::new(0.0, 10.0), 0.0),
+            },
+        ];
+        let (vertices, indices) = road_collider_mesh(&frames);
+        let collider = road_mesh_collider(vertices, indices);
+
+        let hit = collider.cast_ray(
+            Vec3::ZERO,
+            Quat::IDENTITY,
+            Vec3::new(0.0, 2.0, 5.0),
+            Vec3::NEG_Y,
+            4.0,
+            false,
+        );
+
+        assert!(hit.is_some());
+    }
+
+    #[test]
+    fn track_rail_paths_merge_piece_seams() {
+        let first = TrackPiece {
+            kind: TrackPieceKind::Straight,
+            surface: SurfaceKind::Asphalt,
+            frames: vec![
+                PathFrame {
+                    pose: Pose2::new(Vec2::ZERO, 0.0),
+                },
+                PathFrame {
+                    pose: Pose2::new(Vec2::new(0.0, 10.0), 0.0),
+                },
+            ],
+        };
+        let second = TrackPiece {
+            kind: TrackPieceKind::Straight,
+            surface: SurfaceKind::Asphalt,
+            frames: vec![
+                PathFrame {
+                    pose: Pose2::new(Vec2::new(0.0, 10.0), 0.0),
+                },
+                PathFrame {
+                    pose: Pose2::new(Vec2::new(0.0, 20.0), 0.0),
+                },
+            ],
+        };
+
+        let rails = track_rail_paths(&[first, second]);
+
+        assert_eq!(rails.len(), 2);
+        assert!(rails.iter().all(|rail| rail.points.len() == 3));
     }
 }

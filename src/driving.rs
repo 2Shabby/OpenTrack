@@ -9,8 +9,7 @@ pub use model::{DriveMode, DrivingTuning, HandlingState};
 use crate::game_state::{GameState, not_paused};
 use crate::geometry::{forward_3d, yaw_rotation};
 use crate::physics::{
-    AvianTrackPhysicsQueries, GroundContact, GroundSource, RailCollider, RoadCollider,
-    TrackPhysicsQueries,
+    AvianTrackPhysicsQueries, GroundContact, GroundSource, RoadCollider, TrackPhysicsQueries,
 };
 use crate::surface::{SurfaceKind, SurfaceLibrary};
 
@@ -22,6 +21,7 @@ const BODY_PITCH_RATE: f32 = 0.05;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
 const FRONT_WHEEL_MAX_STEER: f32 = 0.42;
 const ASSET_WHEEL_SPIN_RATE: f32 = 2.0;
+const CAR_COLLISION_SKIN: f32 = 0.02;
 const WHEEL_CONTACT_COUNT: usize = 4;
 const WHEEL_CONTACT_LABELS: [&str; WHEEL_CONTACT_COUNT] = ["FL", "FR", "RL", "RR"];
 
@@ -73,6 +73,7 @@ impl Plugin for DrivingPlugin {
 
 #[derive(Component)]
 pub struct PlayerCar {
+    pub previous_translation: Vec3,
     pub velocity: Vec3,
     pub yaw: f32,
     pub current_surface: SurfaceKind,
@@ -90,6 +91,7 @@ pub struct PlayerCar {
 impl Default for PlayerCar {
     fn default() -> Self {
         Self {
+            previous_translation: Vec3::ZERO,
             velocity: Vec3::ZERO,
             yaw: 0.0,
             current_surface: SurfaceKind::Asphalt,
@@ -110,6 +112,7 @@ impl PlayerCar {
     pub fn reset_to_spawn(&mut self, transform: &mut Transform, car_spawn: CarSpawn) {
         *self = Self::default();
         self.yaw = car_spawn.yaw;
+        self.previous_translation = car_spawn.translation;
         transform.translation = car_spawn.translation;
         transform.rotation = car_spawn.rotation();
     }
@@ -210,17 +213,17 @@ struct DrivingContext<'w, 's> {
     surfaces: Res<'w, SurfaceLibrary>,
     spatial_query: SpatialQuery<'w, 's>,
     roads: Query<'w, 's, (Entity, &'static RoadCollider)>,
-    rails: Query<'w, 's, (Entity, &'static RailCollider)>,
 }
 
 fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCar)>) {
     let dt = ctx.time.delta_secs();
-    let physics = AvianTrackPhysicsQueries::new(&ctx.spatial_query, &ctx.roads, &ctx.rails);
+    let physics = AvianTrackPhysicsQueries::new(&ctx.spatial_query, &ctx.roads);
 
     for (mut transform, mut car) in &mut cars {
         if ctx.keys.just_pressed(KeyCode::KeyR) {
             car.reset_to_spawn(&mut transform, *ctx.car_spawn);
         }
+        car.previous_translation = transform.translation;
 
         let input = model::ControlInput::from_keys(&ctx.keys);
         car.throttle = input.throttle;
@@ -268,10 +271,12 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
         let capped_lateral_speed = car.velocity.dot(basis.right);
         car.velocity = basis.forward * capped_forward_speed + basis.right * capped_lateral_speed;
 
-        let mut next_translation = transform.translation + car.velocity * dt;
-        if let Some(hit) = physics.cast_car_shape(next_translation, car.yaw, car.velocity) {
-            next_translation += hit.normal * (hit.penetration + 0.01);
-
+        let current_translation = transform.translation;
+        let mut next_translation = current_translation + car.velocity * dt;
+        if let Some(hit) = physics.cast_car_motion(current_translation, next_translation, car.yaw) {
+            let motion = next_translation - current_translation;
+            let travel = (hit.travel - CAR_COLLISION_SKIN).max(0.0);
+            next_translation = current_translation + motion.normalize_or_zero() * travel;
             let inward_speed = car.velocity.dot(hit.normal);
             if inward_speed < 0.0 {
                 car.velocity -= hit.normal * inward_speed * 1.35;

@@ -6,8 +6,8 @@ use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
 
 pub use components::{
-    RailCollider, RoadCollider, rail_collider, rail_collision_layers, road_collider,
-    road_collision_layers, static_rigid_body,
+    RailCollider, RoadCollider, rail_collision_layers, rail_path_collider, road_collision_layers,
+    road_mesh_collider, static_rigid_body,
 };
 pub use queries::{AvianTrackPhysicsQueries, GroundContact, GroundSource, TrackPhysicsQueries};
 

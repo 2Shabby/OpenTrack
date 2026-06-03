@@ -1,9 +1,8 @@
 use bevy::prelude::*;
 
 use super::generation::{PathFrame, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece, TrackPieceKind};
-use super::path_geometry::{line_path, line_segments, road_edges};
+use super::path_geometry::road_edges;
 use crate::geometry::{OrientedRect, Pose2};
-use crate::surface::SurfaceKind;
 
 #[derive(Clone, Debug)]
 pub struct TrackPieceGeometry {
@@ -14,15 +13,13 @@ pub struct TrackPieceGeometry {
 
 #[derive(Clone, Copy, Debug)]
 pub struct TrackRoadSpan {
-    pub surface: SurfaceKind,
     pub bounds: OrientedRect,
     pub length: f32,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct TrackRailSpan {
-    pub bounds: OrientedRect,
-    pub length: f32,
+    pub points: Vec<Vec2>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -42,13 +39,15 @@ impl TrackPiece {
         let roads: Vec<_> = self
             .frames
             .windows(2)
-            .map(|pair| road_span([pair[0], pair[1]], self.surface))
+            .map(|pair| road_span([pair[0], pair[1]]))
             .collect();
         let edges = road_edges(&self.frames, TRACK_WIDTH + RAIL_THICKNESS);
-        let rails = rail_spans_for_boundary(&edges.left)
-            .into_iter()
-            .chain(rail_spans_for_boundary(&edges.right))
-            .collect();
+        let rails = vec![
+            TrackRailSpan { points: edges.left },
+            TrackRailSpan {
+                points: edges.right,
+            },
+        ];
 
         TrackPieceGeometry {
             roads,
@@ -57,12 +56,8 @@ impl TrackPiece {
         }
     }
 
-    pub fn segment_count(&self) -> usize {
-        self.frames.len().saturating_sub(1)
-    }
-
-    pub fn rail_count(&self) -> usize {
-        self.segment_count() * 2
+    pub fn rail_count(pieces: &[Self]) -> usize {
+        if pieces.is_empty() { 0 } else { 2 }
     }
 
     pub fn trigger_count(pieces: &[Self]) -> usize {
@@ -73,7 +68,7 @@ impl TrackPiece {
     }
 }
 
-fn road_span(frames: [PathFrame; 2], surface: SurfaceKind) -> TrackRoadSpan {
+fn road_span(frames: [PathFrame; 2]) -> TrackRoadSpan {
     let entry = frames[0].pose;
     let exit = frames[1].pose;
     let length = entry.position.distance(exit.position);
@@ -83,28 +78,7 @@ fn road_span(frames: [PathFrame; 2], surface: SurfaceKind) -> TrackRoadSpan {
     );
 
     TrackRoadSpan {
-        surface,
         bounds: OrientedRect::new(pose, Vec2::new(TRACK_WIDTH * 0.5, length * 0.5)),
-        length,
-    }
-}
-
-fn rail_spans_for_boundary(points: &[Vec2]) -> Vec<TrackRailSpan> {
-    line_segments(&line_path(points))
-        .into_iter()
-        .map(rail_span)
-        .collect()
-}
-
-fn rail_span(segment: [Vec2; 2]) -> TrackRailSpan {
-    let [start, end] = segment;
-    let delta = end - start;
-    let length = delta.length();
-    let yaw = delta.x.atan2(delta.y);
-    let pose = Pose2::new((start + end) * 0.5, yaw);
-
-    TrackRailSpan {
-        bounds: OrientedRect::new(pose, Vec2::new(RAIL_THICKNESS * 0.5, length * 0.5)),
         length,
     }
 }

@@ -78,6 +78,8 @@ Current generator:
 * road surface meshes use `bevy_procedural_meshes`
 * 2D path vocabulary and boundary extraction use `kurbo`
 * Bevy curve APIs sample straight and constant-arc pieces into `PathFrame`s
+* road contact colliders are piece-level Avian triangle meshes from sampled path edges
+* rail collision colliders are track-level Avian compound capsules from merged sampled boundary paths
 
 Generation validator should stay focused on correctness:
 
@@ -87,6 +89,7 @@ Generation validator should stay focused on correctness:
 * coherent curve samples
 * trigger alignment
 * generated count consistency
+* rail boundary paths have coherent points and nonzero segments
 
 Do not reject tracks for subjective variety or boringness in validation.
 
@@ -148,6 +151,7 @@ Working now:
 * imported SportsCar/SportsCar2 visuals
 * imported wheel-node steering/spin where nodes are present
 * fixed logical wheel contact samples affecting lateral grip
+* swept checkpoint/finish trigger detection
 * HUD and debug overlay
 * session-only ghosts and leaderboard
 
@@ -162,22 +166,25 @@ Recent fixes:
 * changed shell UI cleanup to despawn root entities only, avoiding duplicate child despawn warnings
 * centralized shell button spawning in a shared shell UI helper
 * collapsed wheel contact storage to one fixed sample array
+* replaced per-segment road cuboid colliders with path-derived Avian road mesh colliders
+* replaced handrolled car-vs-rail rectangle collision with Avian shape casts against path-derived rail colliders
+* merged rail collision into track-level left/right boundary paths to remove piece seam gaps
+* changed checkpoint/finish detection from point containment to swept trigger crossing
+* tightened primitive validation around rail boundary paths
 
 ## Pending Work
 
 Highest priority:
 
-1. Replace per-segment cuboid rail colliders with path-derived continuous edge collision primitives for curves.
-2. Classify true boundaries versus internal seams so rails never appear at surface-transition seams.
-3. Add road/rail primitive validation comparing mesh edges, boundary paths, collider spans, and trigger normals.
-4. Add a debug-only imported vehicle node/axis inspector only if future assets make wheel axes ambiguous.
+1. Add a richer debug primitive overlay for road mesh vertices, road collider mesh vertices, rail paths, and trigger normals.
+2. Add a debug-only imported vehicle node/axis inspector only if future assets make wheel axes ambiguous.
 
 Next:
 
-5. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
-6. Add banked track frames after the flat road/rail/contact pipeline is coherent.
-7. Add `rstar` broad-phase indexing only if validation performance needs it.
-8. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
-9. Add vertical pieces only after slope/ramp recovery and placement validation exist.
-10. Improve setup/results/pause UI polish inside the current shell modules.
-11. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
+3. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
+4. Add banked track frames after the flat road/rail/contact pipeline is coherent.
+5. Add `rstar` broad-phase indexing only if validation performance needs it.
+6. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
+7. Add vertical pieces only after slope/ramp recovery and placement validation exist.
+8. Improve setup/results/pause UI polish inside the current shell modules.
+9. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
