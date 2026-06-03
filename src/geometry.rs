@@ -48,23 +48,6 @@ impl OrientedRect {
 
         local.x.abs() <= self.half_extents.x && local.y.abs() <= self.half_extents.y
     }
-
-    pub fn intersects(self, other: Self) -> bool {
-        let axes = [
-            self.pose.right(),
-            self.pose.forward(),
-            other.pose.right(),
-            other.pose.forward(),
-        ];
-
-        axes.into_iter()
-            .all(|axis| projections_overlap(self, other, axis.normalize_or_zero()))
-    }
-
-    pub fn shrunken(self, amount: f32) -> Option<Self> {
-        let half_extents = self.half_extents - Vec2::splat(amount);
-        (half_extents.x > 0.0 && half_extents.y > 0.0).then(|| Self::new(self.pose, half_extents))
-    }
 }
 
 pub fn forward_3d(yaw: f32) -> Vec3 {
@@ -74,21 +57,4 @@ pub fn forward_3d(yaw: f32) -> Vec3 {
 pub fn rotate_2d(value: Vec2, angle: f32) -> Vec2 {
     let (sin, cos) = angle.sin_cos();
     Vec2::new(value.x * cos - value.y * sin, value.x * sin + value.y * cos)
-}
-
-fn projections_overlap(a: OrientedRect, b: OrientedRect, axis: Vec2) -> bool {
-    if axis == Vec2::ZERO {
-        return true;
-    }
-
-    let distance = (b.pose.position - a.pose.position).dot(axis).abs();
-    let a_radius = projected_radius(a, axis);
-    let b_radius = projected_radius(b, axis);
-
-    distance <= a_radius + b_radius
-}
-
-fn projected_radius(rect: OrientedRect, axis: Vec2) -> f32 {
-    rect.half_extents.x * rect.pose.right().dot(axis).abs()
-        + rect.half_extents.y * rect.pose.forward().dot(axis).abs()
 }

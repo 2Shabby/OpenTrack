@@ -23,7 +23,7 @@ pub(crate) enum TrackPath {
 }
 
 impl TrackPath {
-    pub(crate) fn for_piece(entry: Pose2, kind: TrackPieceKind, difficulty: u8) -> Self {
+    pub(crate) fn for_piece(entry: Pose2, kind: TrackPieceKind) -> Self {
         match kind {
             TrackPieceKind::Straight | TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish => {
                 Self::Straight {
@@ -35,7 +35,7 @@ impl TrackPath {
                 entry,
                 direction,
                 radius: CURVE_RADIUS,
-                angle: curve_angle(difficulty),
+                angle: CURVE_ANGLE,
                 steps: CURVE_STEPS,
             },
         }
@@ -55,12 +55,8 @@ impl TrackPath {
     }
 }
 
-pub(crate) fn generated_frames(
-    entry: Pose2,
-    kind: TrackPieceKind,
-    difficulty: u8,
-) -> Vec<PathFrame> {
-    TrackPath::for_piece(entry, kind, difficulty).sample_frames()
+pub(crate) fn generated_frames(entry: Pose2, kind: TrackPieceKind) -> Vec<PathFrame> {
+    TrackPath::for_piece(entry, kind).sample_frames()
 }
 
 fn straight_frames(entry: Pose2, length: f32) -> Vec<PathFrame> {
@@ -107,10 +103,4 @@ fn sample_pose_curve(curve: &impl Curve<Pose2>, steps: usize) -> Vec<PathFrame> 
         .collect()
 }
 
-fn curve_angle(difficulty: u8) -> f32 {
-    match difficulty {
-        0 => std::f32::consts::FRAC_PI_6,
-        1 => std::f32::consts::FRAC_PI_4,
-        _ => std::f32::consts::FRAC_PI_3,
-    }
-}
+const CURVE_ANGLE: f32 = std::f32::consts::FRAC_PI_4;

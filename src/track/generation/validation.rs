@@ -1,8 +1,14 @@
 use super::types::{GeneratedTrackInfo, TrackPiece, TrackPieceKind};
-use crate::geometry::OrientedRect;
+use std::collections::HashSet;
 
 const MAX_ROUTE_YAW: f32 = std::f32::consts::PI * 0.85;
-const ROAD_OVERLAP_SHRINK: f32 = 0.35;
+const OCCUPANCY_CELL_SIZE: f32 = 10.0;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct OccupancyCell {
+    x: i32,
+    y: i32,
+}
 
 pub fn validate_track_pieces(pieces: &[TrackPiece]) -> Result<(), String> {
     if pieces.is_empty() {
@@ -47,22 +53,17 @@ pub fn validate_track_pieces(pieces: &[TrackPiece]) -> Result<(), String> {
         ));
     }
 
-    validate_no_road_overlaps(pieces)?;
+    validate_no_occupied_cell_reuse(pieces)?;
 
     Ok(())
 }
 
 pub(crate) fn candidate_is_valid(
-    pieces: &[TrackPiece],
-    occupied_roads: &[OrientedRect],
+    occupied: &HashSet<OccupancyCell>,
     candidate: &TrackPiece,
     index: usize,
 ) -> Result<(), String> {
     validate_piece_primitive(candidate, index)?;
-
-    if let Some(previous) = pieces.last() {
-        validate_piece_connection(index.saturating_sub(1), previous, candidate)?;
-    }
 
     if candidate.exit().yaw.abs() > MAX_ROUTE_YAW {
         return Err(format!(
@@ -72,15 +73,11 @@ pub(crate) fn candidate_is_valid(
         ));
     }
 
-    let candidate_roads: Vec<_> = candidate
-        .geometry()
-        .roads
-        .into_iter()
-        .map(|road| road.bounds)
-        .collect();
-
-    validate_candidate_internal_overlaps(index, &candidate_roads)?;
-    validate_candidate_against_occupied(index, occupied_roads, &candidate_roads)?;
+    for cell in occupied_cells_for_fit(candidate) {
+        if occupied.contains(&cell) {
+            return Err(format!("piece {index} enters occupied sector {cell:?}"));
+        }
+    }
 
     Ok(())
 }
@@ -218,59 +215,13 @@ fn validate_piece_connection(
     Ok(())
 }
 
-fn validate_candidate_internal_overlaps(
-    piece_index: usize,
-    candidate_roads: &[OrientedRect],
-) -> Result<(), String> {
-    for first_index in 0..candidate_roads.len() {
-        for second_index in (first_index + 2)..candidate_roads.len() {
-            if road_rects_overlap(candidate_roads[first_index], candidate_roads[second_index]) {
-                return Err(format!(
-                    "piece {piece_index} has overlapping road segments {first_index} and {second_index}"
-                ));
-            }
-        }
-    }
+fn validate_no_occupied_cell_reuse(pieces: &[TrackPiece]) -> Result<(), String> {
+    let mut occupied = HashSet::new();
 
-    Ok(())
-}
-
-fn validate_candidate_against_occupied(
-    piece_index: usize,
-    occupied_roads: &[OrientedRect],
-    candidate_roads: &[OrientedRect],
-) -> Result<(), String> {
-    let allowed_connection_index = occupied_roads.len().checked_sub(1);
-
-    for (candidate_index, candidate) in candidate_roads.iter().copied().enumerate() {
-        for (occupied_index, occupied) in occupied_roads.iter().copied().enumerate() {
-            if Some(occupied_index) == allowed_connection_index && candidate_index == 0 {
-                continue;
-            }
-
-            if road_rects_overlap(candidate, occupied) {
-                return Err(format!(
-                    "piece {piece_index} road segment {candidate_index} overlaps existing segment {occupied_index}"
-                ));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn validate_no_road_overlaps(pieces: &[TrackPiece]) -> Result<(), String> {
-    let road_bounds: Vec<_> = pieces
-        .iter()
-        .flat_map(|piece| piece.geometry().roads.into_iter().map(|road| road.bounds))
-        .collect();
-
-    for first_index in 0..road_bounds.len() {
-        for second_index in (first_index + 2)..road_bounds.len() {
-            if road_rects_overlap(road_bounds[first_index], road_bounds[second_index]) {
-                return Err(format!(
-                    "road segment {first_index} overlaps non-adjacent road segment {second_index}"
-                ));
+    for (index, piece) in pieces.iter().enumerate() {
+        for cell in occupied_cells_for_fit(piece) {
+            if !occupied.insert(cell) {
+                return Err(format!("piece {index} reuses occupied sector {cell:?}"));
             }
         }
     }
@@ -307,30 +258,34 @@ fn validate_route_rules(pieces: &[TrackPiece]) -> Result<(), String> {
             ));
         }
     }
-
-    for (index, pair) in pieces.windows(2).enumerate() {
-        if matches!(pair[0].kind, TrackPieceKind::Curve(_))
-            && matches!(pair[1].kind, TrackPieceKind::Curve(_))
-        {
-            return Err(format!(
-                "piece {index} and {} are adjacent curves without recovery",
-                index + 1
-            ));
-        }
-    }
-
     Ok(())
 }
 
-fn road_rects_overlap(a: OrientedRect, b: OrientedRect) -> bool {
-    let Some(a) = a.shrunken(ROAD_OVERLAP_SHRINK) else {
-        return false;
-    };
-    let Some(b) = b.shrunken(ROAD_OVERLAP_SHRINK) else {
-        return false;
-    };
+pub(crate) fn occupied_cells(piece: &TrackPiece) -> Vec<OccupancyCell> {
+    let mut cells = Vec::with_capacity(piece.frames.len());
+    for frame in &piece.frames {
+        let cell = OccupancyCell::from_position(frame.pose.position);
+        if cells.last().copied() != Some(cell) {
+            cells.push(cell);
+        }
+    }
+    cells
+}
 
-    a.intersects(b)
+fn occupied_cells_for_fit(piece: &TrackPiece) -> impl Iterator<Item = OccupancyCell> + '_ {
+    let entry = OccupancyCell::from_position(piece.entry().position);
+    occupied_cells(piece)
+        .into_iter()
+        .filter(move |cell| *cell != entry)
+}
+
+impl OccupancyCell {
+    fn from_position(position: bevy::prelude::Vec2) -> Self {
+        Self {
+            x: (position.x / OCCUPANCY_CELL_SIZE).floor() as i32,
+            y: (position.y / OCCUPANCY_CELL_SIZE).floor() as i32,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -341,7 +296,7 @@ mod tests {
 
     use super::super::assembly::generate_track_pieces;
     use super::super::path::TrackPath;
-    use super::super::types::{SurfaceMix, TrackRecipe, TurnDirection};
+    use super::super::types::{TrackRecipe, TurnDirection};
 
     #[test]
     fn generated_tracks_validate_across_seed_range() {
@@ -349,8 +304,6 @@ mod tests {
             let recipe = TrackRecipe {
                 seed,
                 piece_count: 32,
-                difficulty: 3,
-                surface_mix: SurfaceMix::Technical,
             };
             let pieces = generate_track_pieces(&recipe);
 
@@ -361,7 +314,25 @@ mod tests {
     }
 
     #[test]
-    fn candidate_validation_rejects_non_adjacent_overlap() {
+    fn generated_tracks_include_curves_across_seed_range() {
+        for seed in 0..128 {
+            let recipe = TrackRecipe {
+                seed,
+                piece_count: 16,
+            };
+            let pieces = generate_track_pieces(&recipe);
+
+            assert!(
+                pieces
+                    .iter()
+                    .any(|piece| matches!(piece.kind, TrackPieceKind::Curve(_))),
+                "seed {seed} generated no curve pieces"
+            );
+        }
+    }
+
+    #[test]
+    fn candidate_validation_rejects_occupied_sector_entry() {
         let first = TrackPiece {
             kind: TrackPieceKind::Straight,
             surface: SurfaceKind::Asphalt,
@@ -370,12 +341,7 @@ mod tests {
                 TrackPieceKind::Straight,
             ),
         };
-        let occupied = first
-            .geometry()
-            .roads
-            .into_iter()
-            .map(|road| road.bounds)
-            .collect::<Vec<_>>();
+        let occupied = occupied_cells(&first).into_iter().collect::<HashSet<_>>();
         let overlapping = TrackPiece {
             kind: TrackPieceKind::Straight,
             surface: SurfaceKind::Asphalt,
@@ -385,14 +351,14 @@ mod tests {
             ),
         };
 
-        let error = candidate_is_valid(&[first], &occupied, &overlapping, 1)
-            .expect_err("overlapping candidate should be rejected");
+        let error = candidate_is_valid(&occupied, &overlapping, 1)
+            .expect_err("occupied-sector candidate should be rejected");
 
-        assert!(error.contains("gap") || error.contains("overlaps"));
+        assert!(error.contains("occupied sector"));
     }
 
     #[test]
-    fn route_validation_rejects_adjacent_curves() {
+    fn route_validation_allows_adjacent_curves_when_connected() {
         let first = TrackPiece {
             kind: TrackPieceKind::Curve(TurnDirection::Right),
             surface: SurfaceKind::Asphalt,
@@ -417,13 +383,10 @@ mod tests {
             frames: test_frames(checkpoint.exit(), TrackPieceKind::Finish),
         };
 
-        let error = validate_track_pieces(&[first, second, checkpoint, finish])
-            .expect_err("adjacent curves should be rejected");
-
-        assert!(error.contains("adjacent curves"));
+        validate_track_pieces(&[first, second, checkpoint, finish]).unwrap();
     }
 
     fn test_frames(entry: Pose2, kind: TrackPieceKind) -> Vec<super::super::types::PathFrame> {
-        TrackPath::for_piece(entry, kind, 1).sample_frames()
+        TrackPath::for_piece(entry, kind).sample_frames()
     }
 }

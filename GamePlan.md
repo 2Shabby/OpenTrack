@@ -211,8 +211,6 @@ Track recipe:
 ```text
 seed
 length
-difficulty
-surface_mix
 elevation/verticality bias
 speed_bias
 technicality
@@ -229,7 +227,6 @@ exit transform
 collision mesh
 visual mesh
 surface type
-difficulty rating
 connection rules
 trigger/checkpoint data
 ```
@@ -468,7 +465,7 @@ Crate audit pass results:
 * Bevy built-in curves are the first candidate because they are already in the engine dependency and match Bevy 0.18.1. Use them to prototype `TrackPath` as sampled frames generated from curve primitives.
 * `kurbo` is the next path-vocabulary candidate if Bevy curves do not give enough 2D path operations for road edge offsets, flattening tolerance, or future Bezier/arc authoring.
 * `lyon_tessellation` is the robust low-level tessellation candidate when road surfaces stop being simple strips. It is most valuable for fills/strokes, joins, caps, and non-rectangular future pieces.
-* `bevy_procedural_meshes` targets Bevy 0.18 and already depends optionally on `lyon`; current road surface generation now uses it as the single mesh path instead of maintaining a hand-built strip fallback.
+* `bevy_procedural_meshes` targets Bevy 0.18 and already depends optionally on `lyon`; current road surface generation now uses it as the single mesh path instead of maintaining hand-built strip mesh code.
 * `rstar` should replace broad-phase overlap scanning once generator piece counts or candidate retries grow. It should not replace project geometry correctness; it only narrows which road spans reach SAT validation.
 * `bevy_lookup_curve` belongs in driving/tuning once hard-coded grip, acceleration, steering, and drift values become data. It is not a generation crate.
 * `bevy_mod_raycast` is not useful while Avian already owns physics queries. It targets older Bevy compatibility in its current docs and would duplicate the project-owned Avian query layer.
@@ -546,16 +543,16 @@ Implemented systems:
 * Layered arcade driving model with explicit forward/braking/reverse modes.
 * Data-driven surfaces: asphalt, dirt, ice, boost.
 * Project-owned physics-query boundary for ground/surface and rail collision.
-* Deterministic modular track generation from seed, length, difficulty, and surface mix.
+* Deterministic modular track generation from seed and length.
 * Straight and sampled constant-curvature curve pieces.
 * Modular track piece spawning with generated road meshes, rails, checkpoint triggers, and finish triggers.
-* Track validation for finish count, checkpoint-before-finish order, piece frame counts, segment lengths, rail counts, trigger alignment, route yaw bounds, recovery after curves, overlap rejection, and piece continuity.
+* Track validation for finish count, checkpoint-before-finish order, piece frame counts, segment lengths, rail counts, trigger alignment, route yaw bounds, sector occupancy, and piece continuity.
 * Session timer, checkpoint progress, restart, hotseat players, in-memory leaderboard, and session-only ghost replay.
 * Realistic sports-car mesh from `~/Downloads/Realistic Car Pack - Nov 2018.zip`.
 * Off-track grass/forest scenery using textures from `~/Downloads/LowpolyForestPack.zip`.
 * Debug overlay for seed, pieces, generated entity counts, player state, run state, speed, signed speed, drive mode, surface, and tuning values.
 * App state shell with main menu, setup screen, driving state, pause overlay, results screen, and clean spawned-scene teardown.
-* Setup controls for player count, seed, track length, difficulty, surface mix, and car color.
+* Setup controls for player count, seed, track length, and car color.
 
 Current constraints:
 
@@ -564,7 +561,7 @@ Current constraints:
 * Hotseat player setup currently chooses only player count; player names are generated as `Driver N`.
 * Pause is represented by `PauseState` during `GameState::Driving`, not as a separate `Paused` app state.
 * Track generation has flat straights and flat curves only; no slopes, ramps, jumps, bridges, or drops yet.
-* Recipes expose only seed, length, difficulty, and surface mix; speed bias, technicality, verticality, piece sets, themes, and rule sets are not modeled yet.
+* Recipes expose only seed and length; speed bias, technicality, verticality, piece sets, themes, and rule sets are not modeled yet.
 * Ghosts are session-only best ghosts and are not keyed by player, recipe, seed, generator version, or physics tuning version.
 * Road and rail queries are backed by Avian static cuboid colliders, with project-owned metadata still used for surface lookup and gameplay response semantics.
 * Road/rail colliders are on separate collision layers so future dynamic/query-only colliders do not pollute track queries.
@@ -575,18 +572,18 @@ Completed recent code changes:
 1. Added Bevy app states for `MainMenu`, `Setup`, `Driving`, and `Results`.
 2. Moved track, car, camera, lighting, ghost, and debug spawning behind state transitions.
 3. Added main menu and local hotseat setup flow.
-4. Added recipe controls for seed, length, difficulty, and surface mix.
+4. Added recipe controls for seed and length.
 5. Added car color selection using the existing sports-car mesh.
 6. Added pause overlay with resume, restart, setup/menu, and quit actions.
 7. Added post-run/results screen with leaderboard and next-player/retry actions.
 8. Added sampled curve generation and road mesh generation from path frames.
 9. Fixed rail collision query selection to resolve the deepest overlapping rail contact.
 10. Added Avian physics plugins and static rail colliders behind the project-owned physics-query boundary.
-11. Reworked track generation into sequential candidate assembly with validation before accepting each piece.
-12. Added oriented-road overlap checks and multi-seed generation validation tests.
+11. Reworked track generation into sector-occupancy planning with bounded backtracking.
+12. Added sector occupancy checks and multi-seed generation validation tests.
 13. Added static Avian road colliders and Avian-backed ground raycasts for surface lookup.
 14. Added road/rail collision layers and layer-filtered spatial queries.
-15. Added route-level generation checks for checkpoint order, route yaw bounds, adjacent-curve recovery, and curve sample coherence.
+15. Added route-level generation checks for checkpoint order, route yaw bounds, and curve sample coherence.
 16. Split physics into focused modules for components, layers, and Avian-backed queries.
 17. Renamed `spatial` to `geometry` so shared pose/bounds helpers live under a clearer layer.
 18. Split track generation into route assembly, primitive path generation, shared generation types, and validation modules.
@@ -598,13 +595,15 @@ Completed recent code changes:
 24. Split shell UI code by screen/flow: main menu, setup, results, and pause.
 25. Grouped large Bevy system signatures with local `SystemParam` structs and query aliases so driving/debug systems are easier to read and clippy-clean without adding generic app layers.
 26. Added a focused road mesh unit test that verifies procedural road meshes land on the X/Z ground plane.
+27. Removed generation presets from the setup UI; there is one generation mode controlled by seed and length.
+28. Moved overlap fitting to planner-owned occupied sectors instead of low-level road rectangle SAT checks.
+29. Removed silent alternate track generation; planner failure is explicit during development.
 
 Next code changes:
 
 1. Replace hard-coded candidate lists with piece metadata, connection rules, and candidate weighting.
 2. Audit whether `kurbo` should own future 2D path offset/flattening once road pieces need more than frame-derived polygons.
-3. Add route-level validation for generated sequence variety and minimum straight recovery distance by speed/difficulty.
-4. Add dedicated road/rail primitive validation that compares generated mesh edges, collider spans, and trigger normals for each segment.
+3. Add dedicated road/rail primitive validation that compares generated mesh edges, collider spans, and trigger normals for each segment.
 5. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
 6. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
 7. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
@@ -621,7 +620,7 @@ Procedural assembly has started:
 * Surfaces are assigned by deterministic RNG.
 * Road colliders, rail colliders, and checkpoint/finish triggers now use oriented bounds.
 * Track generation now stores explicit entry/exit transforms per piece to keep adjacent pieces and lines aligned.
-* Track generation assembles pieces sequentially and rejects invalid candidates before appending them.
+* Track generation plans pieces with occupied sectors and bounded backtracking before emitting geometry.
 * Straight pieces now derive center pose, length, road bounds, rails, and road colliders from entry/exit centerline frames.
 * Road surface visuals are generated as meshes from path frames instead of spawned as rotated plane primitives.
 * Generated tracks now include deterministic sampled arc curves.
@@ -657,15 +656,14 @@ Procedural assembly has started:
 * Car visuals now use separate body and wheel primitives with body roll/pitch, front-wheel steering, and wheel spin.
 * In-run HUD shows driver, timer, checkpoint progress, speed, best time, and ghost time; verbose debug is toggled with F3.
 * Grass field, forest, and rocks are placed relative to generated track bounds instead of fixed world coordinates.
-* Track validation now checks empty tracks, missing finish/checkpoint, checkpoint-before-finish order, short pieces, zero-length segments, route yaw bounds, adjacent curves, connections, and generated counts.
-* Track validation now rejects non-adjacent road overlap using oriented rectangle SAT checks.
+* Track validation now checks empty tracks, missing finish/checkpoint, checkpoint-before-finish order, short pieces, zero-length segments, route yaw bounds, connections, occupied sectors, and generated counts.
 * Four-wheel contact samples now affect lateral grip, so split-surface cases change handling.
-* Off-track fallback surface is now grass instead of asphalt, with slower acceleration and higher drag.
+* Off-track surface is now grass instead of asphalt, with slower acceleration and higher drag.
 * Wheel visuals tint by contact surface, and HUD shows handling/surface state.
-* Setup recipe controls now include difficulty and surface mix, and generation uses them for curve frequency and surface weighting.
+* Setup recipe controls now expose one generation mode: player count, seed, length, and car color.
 * `track/piece.rs` now exposes one piece geometry contract for road spans, rail spans, and checkpoint/finish trigger lines.
 * Track spawning and validation now consume the same generated piece geometry instead of rebuilding road, rail, and trigger bounds separately.
-* Curves are now explicit generated piece kinds instead of straight pieces with curved frames, and generation inserts straight recovery after curves.
+* Curves are now explicit generated piece kinds instead of straight pieces with curved frames, and the generator tries curve candidates before straights when sectors fit.
 * Pause flow now supports resume, restart, setup, main menu, and quit with run state reset on scene exits.
 * Ground queries now distinguish road/off-track source from handling surface through Avian road raycasts; HUD/debug show both instead of treating lookup misses as just another road surface.
 
@@ -679,12 +677,11 @@ Current shell flow is prototype-complete for the local session loop, and the cod
 
 Pending:
 
-* expand the piece-library contract with authored piece metadata, difficulty tags, and connection rules
+* expand the piece-library contract with piece metadata and connection rules
 * expand generated piece sequences beyond straight, curve, checkpoint, and finish pieces
 * improve curve piece variety and primitive validation beyond constant-radius arcs
 * checkpoint and finish line placement for every future piece type
 * add metadata-driven connection rules and candidate weighting
-* add difficulty-aware route-level recovery spacing after high-speed curves and future jumps/drops
 * add unreachable-finish validation once routes become more complex
 
 ### Vehicle and Feel

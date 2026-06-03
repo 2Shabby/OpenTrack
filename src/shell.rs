@@ -6,8 +6,6 @@ mod setup;
 use bevy::prelude::*;
 
 use crate::game_state::{GameState, PauseState};
-use crate::track::SurfaceMix;
-
 pub struct ShellPlugin;
 
 impl Plugin for ShellPlugin {
@@ -48,8 +46,6 @@ pub(super) struct SessionSetup {
     pub player_count: usize,
     pub seed: u64,
     pub piece_count: usize,
-    pub difficulty: u8,
-    pub surface_mix: SurfaceMix,
     pub car_color_index: usize,
 }
 
@@ -59,8 +55,6 @@ impl Default for SessionSetup {
             player_count: 2,
             seed: 0x5EED_2026,
             piece_count: 8,
-            difficulty: 1,
-            surface_mix: SurfaceMix::Balanced,
             car_color_index: 0,
         }
     }

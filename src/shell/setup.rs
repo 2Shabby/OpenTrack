@@ -25,10 +25,6 @@ pub(super) enum SetupAction {
     SeedUp,
     LengthDown,
     LengthUp,
-    DifficultyDown,
-    DifficultyUp,
-    SurfaceMixDown,
-    SurfaceMixUp,
     ColorDown,
     ColorUp,
     StartRace,
@@ -40,8 +36,6 @@ pub(super) enum SetupValue {
     Players,
     Seed,
     Length,
-    Difficulty,
-    SurfaceMix,
     Color,
 }
 
@@ -96,20 +90,6 @@ pub(super) fn spawn(mut commands: Commands) {
             );
             row(
                 parent,
-                "Difficulty",
-                SetupValue::Difficulty,
-                SetupAction::DifficultyDown,
-                SetupAction::DifficultyUp,
-            );
-            row(
-                parent,
-                "Surface",
-                SetupValue::SurfaceMix,
-                SetupAction::SurfaceMixDown,
-                SetupAction::SurfaceMixUp,
-            );
-            row(
-                parent,
                 "Color",
                 SetupValue::Color,
                 SetupAction::ColorDown,
@@ -146,12 +126,6 @@ pub(super) fn handle(
                 setup.piece_count = setup.piece_count.saturating_sub(1).max(4)
             }
             SetupAction::LengthUp => setup.piece_count = (setup.piece_count + 1).min(64),
-            SetupAction::DifficultyDown => {
-                setup.difficulty = setup.difficulty.saturating_sub(1);
-            }
-            SetupAction::DifficultyUp => setup.difficulty = (setup.difficulty + 1).min(3),
-            SetupAction::SurfaceMixDown => setup.surface_mix = setup.surface_mix.previous(),
-            SetupAction::SurfaceMixUp => setup.surface_mix = setup.surface_mix.next(),
             SetupAction::ColorDown => {
                 setup.car_color_index = setup.car_color_index.saturating_sub(1);
             }
@@ -161,8 +135,6 @@ pub(super) fn handle(
             SetupAction::StartRace => {
                 recipe.seed = setup.seed;
                 recipe.piece_count = setup.piece_count;
-                recipe.difficulty = setup.difficulty;
-                recipe.surface_mix = setup.surface_mix;
                 hotseat.configure_player_count(setup.player_count);
                 car_paint.color = car_color(setup.car_color_index);
                 run.reset();
@@ -179,8 +151,6 @@ pub(super) fn update_values(setup: Res<SessionSetup>, mut values: Query<(&mut Te
             SetupValue::Players => setup.player_count.to_string(),
             SetupValue::Seed => setup.seed.to_string(),
             SetupValue::Length => setup.piece_count.to_string(),
-            SetupValue::Difficulty => setup.difficulty.to_string(),
-            SetupValue::SurfaceMix => setup.surface_mix.label().to_string(),
             SetupValue::Color => car_color_name(setup.car_color_index).to_string(),
         };
     }

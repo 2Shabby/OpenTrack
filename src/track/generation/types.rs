@@ -13,8 +13,6 @@ pub const RAIL_THICKNESS: f32 = 0.28;
 pub struct TrackRecipe {
     pub seed: u64,
     pub piece_count: usize,
-    pub difficulty: u8,
-    pub surface_mix: SurfaceMix,
 }
 
 impl Default for TrackRecipe {
@@ -22,41 +20,6 @@ impl Default for TrackRecipe {
         Self {
             seed: 0x5EED_2026,
             piece_count: 8,
-            difficulty: 1,
-            surface_mix: SurfaceMix::Balanced,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SurfaceMix {
-    Balanced,
-    Technical,
-    Fast,
-}
-
-impl SurfaceMix {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Balanced => "Balanced",
-            Self::Technical => "Technical",
-            Self::Fast => "Fast",
-        }
-    }
-
-    pub fn next(self) -> Self {
-        match self {
-            Self::Balanced => Self::Technical,
-            Self::Technical => Self::Fast,
-            Self::Fast => Self::Balanced,
-        }
-    }
-
-    pub fn previous(self) -> Self {
-        match self {
-            Self::Balanced => Self::Fast,
-            Self::Technical => Self::Balanced,
-            Self::Fast => Self::Technical,
         }
     }
 }
