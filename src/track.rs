@@ -3,7 +3,6 @@ mod markers;
 mod path_geometry;
 mod piece;
 mod road_mesh;
-mod scenery;
 mod spawn;
 
 pub use generation::{GeneratedTrackInfo, TrackRecipe};

@@ -49,8 +49,8 @@ Our current car model is a deterministic kinematic controller:
 - Tire forces have wheel loads, target-speed longitudinal demand, per-wheel friction, front/rear saturation, and handling states [src/driving/model.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving/model.rs:369).
 - Longitudinal demand is now source/axle-aware: drive and reverse are front-biased, service braking is all-wheel, rear brake is rear-wheel, and lateral reserve comes from combined tire usage [src/driving/model.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving/model.rs:573).
 - Surface parameters already expose longitudinal/lateral friction, rolling resistance, drag, passive slip, recovery, and rear-brake scales [src/surface.rs](/Users/shaik/Code/OpenTrackTurbo/src/surface.rs:32).
-- Wheel contacts are sampled per wheel and mapped into per-wheel friction [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:166).
-- Visual wheels already bind into front/rear roles, with front steering and rear lock behavior [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:325).
+- Wheel contacts are sampled per wheel and mapped into per-wheel friction [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:230).
+- Visual wheels bind from the supported SportsCar imported mesh transform pattern, with front steering, rear lock behavior, wheel spin, load scaling, and scoped material normalization [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:399).
 - Vehicle collision is a centered rounded kinematic collider, which is the right direction for avoiding chassis snagging [src/physics/components.rs](/Users/shaik/Code/OpenTrackTurbo/src/physics/components.rs:23).
 
 ## Main Adaptation Decisions
@@ -63,7 +63,7 @@ Decision: direct rear-brake grip loss has been replaced by combined tire usage. 
 
 Decision: keep surfaces as game data in `SurfaceParams`. Raydium's contact slip maps cleanly to our `passive_slip_scale`, `recovery_scale`, and lateral/longitudinal friction values. Add new surface knobs only after we prove the existing ones are insufficient.
 
-Decision: do not import ManiaDrive car assets yet. Use their body/wheel separation and visual behavior as inspiration, while continuing with our licensed SportsCar assets under [assets/cars/License.txt](/Users/shaik/Code/OpenTrackTurbo/assets/cars/License.txt:1).
+Decision: do not import ManiaDrive car assets. Use their body/wheel separation and visual behavior as inspiration, while continuing with the single licensed SportsCar FBX under [assets/cars/License.txt](/Users/shaik/Code/OpenTrackTurbo/assets/cars/License.txt:1). The SportsCar FBX is repaired through [sports_car_fbx_tool.py](/Users/shaik/Code/OpenTrackTurbo/tools/sports_car_fbx_tool.py:1), not through runtime asset-selection fallbacks.
 
 ## Useful Ideas To Reimplement
 
@@ -102,7 +102,7 @@ Primary code targets:
 - Existing wheel friction mapping: [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:196)
 - Existing rear lateral scaling: [src/driving/model.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving/model.rs:587)
 
-Expected feel: rear brake creates rotation only when the rear tires are actually loaded and moving, asphalt remains grippy, and dirt/grass/ice slide because their lower tire budgets are physically consumed faster.
+Expected feel: rear brake creates rotation only when the rear tires are actually loaded and moving, asphalt remains grippy, and dirt/ice slide because their lower tire budgets are physically consumed faster.
 
 ### 3. Rear Brake As Secondary Drift Trigger
 
@@ -112,7 +112,7 @@ The current model avoids explicit timer windows and uses combined tire budget. K
 - If speed and steering/slip are present, it should reduce rear lateral reserve through combined slip.
 - Yaw assist should become a small nudge, not the main cause of rotation.
 - Asphalt should mostly stay controlled unless rear brake is held or tapped while steering.
-- Dirt/grass should become more sideways from lower lateral friction and slower recovery, not larger arbitrary yaw.
+- Dirt should become more sideways from lower lateral friction and slower recovery, not larger arbitrary yaw.
 - Ice should slide mainly because both longitudinal and lateral grip are low; rear-brake yaw assist can stay muted.
 
 Current code targets:
@@ -141,7 +141,7 @@ Surface intent:
 
 - Asphalt: high friction, high recovery, low rear-brake amplification.
 - Dirt: moderate longitudinal friction, lower lateral friction, slower recovery.
-- Grass: low/moderate grip, high rolling resistance, slow recovery.
+- Grass/off-track terrain: removed for now; road misses reset to the current start spawn instead of applying a hidden terrain surface or off-road collider.
 - Ice: very low lateral/longitudinal friction, low recovery, muted yaw assist.
 - Boost: keep its surface friction close to asphalt. If boost behavior feels wrong later, make boost a trigger/event rather than a surface-wide forward acceleration.
 
@@ -160,7 +160,7 @@ Recommended Rust behavior:
 Current code targets:
 
 - Load transfer: [src/driving/model.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving/model.rs:472)
-- Body visual attitude from suspension compression: [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:341)
+- Body visual attitude from suspension compression: [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:386)
 
 ### 6. Car Model Presentation
 
@@ -172,7 +172,7 @@ The important car-model lesson is structural, not asset copying:
 - Engine pitch should use motor/wheel speed when an audio module exists, not raw car linear speed.
 - Virtual suspension compression per sampled wheel drives body attitude and wheel placement.
 
-Current code covers body/wheel separation, front-wheel steer, wheel spin, and suspension offsets: [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:341).
+Current code covers body/wheel separation, front-wheel steer, wheel spin, suspension offsets, and scoped importer material normalization. The SportsCar FBX repair tool owns canonical mesh names and outward front hub orientation: [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:399).
 
 ### 7. Chassis Contact Material
 
@@ -201,13 +201,14 @@ Implemented baseline Rust behavior:
 - Per-wheel angular speed is derived from target motor speed, applied longitudinal force, wheel radius, and braking lock tendency.
 - Slip ratio telemetry is exposed for drive spin and brake lock.
 - Imported wheel spin uses front/rear axle wheel state instead of elapsed-time signed-speed fallback.
+- Imported wheel binding is deliberately SportsCar-specific while that is the only supported vehicle asset.
 - Motor/wheel speed is available for engine pitch later.
 - Keep this lightweight; do not add gearboxes, clutches, or full drivetrain simulation.
 
 Primary code targets:
 
 - Tire force output: [src/driving/model.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving/model.rs:278)
-- Player car state: [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:74)
+- Player car state: [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:93)
 - Wheel visuals: [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:341)
 
 ### 9. Directional Boost Pads
@@ -237,8 +238,8 @@ Implemented Rust behavior:
 
 - Treat compliance as recovery/settling modulation, not an independent drift mode.
 - Keep asphalt firm and fast to recover.
-- Make dirt/grass feel soft through slower lateral recovery and slightly delayed settling.
-- Preserve one tire-force code path across asphalt, dirt, ice, boost, and grass.
+- Make dirt feel soft through slower lateral recovery and slightly delayed settling.
+- Preserve one tire-force code path across asphalt, dirt, ice, and boost.
 
 Primary code target: [src/surface.rs](/Users/shaik/Code/OpenTrackTurbo/src/surface.rs:32).
 
@@ -275,7 +276,7 @@ Primary code targets:
 
 4. Completed baseline: retune surfaces using the same knobs.
    - Asphalt should recover most aggressively.
-   - Dirt/grass should slide because lateral friction and recovery are lower.
+   - Dirt should slide because lateral friction and recovery are lower.
    - Ice should be low-grip without large yaw assist.
    - Tests cover asphalt staying grip-biased under hard steering and ice entering slide earlier.
 
@@ -303,7 +304,7 @@ Primary code targets:
    - Imported wheels move by sampled suspension offsets.
 
 10. Completed baseline: surface compliance.
-   - Dirt/grass softness comes from compliance-modulated lateral correction and recovery.
+   - Dirt softness comes from compliance-modulated lateral correction and recovery.
    - Asphalt and boost remain firm.
 
 11. Completed baseline: velocity-based camera and motor-speed feedback prep.
@@ -319,7 +320,7 @@ Keep the order:
 - Verify asphalt clean cornering first.
 - Verify rear brake as secondary rotation.
 - Verify boost pads on straights and curves.
-- Verify dirt/grass compliance and ice readability.
+- Verify dirt compliance and ice readability.
 - Verify rail scrape after the new velocity camera and suspension presentation are active.
 
 This continues the same ManiaDrive lesson: wheels, axles, and contact material matter even in an arcade model.
@@ -332,4 +333,4 @@ Do not import ManiaDrive car meshes/audio yet. Recommendation: yes, because the 
 
 Ignore ManiaDrive track authoring. Recommendation: yes, for now. Track block generation is not needed for the current car/surface polish.
 
-Keep automatic fall/off-track recovery out of scope. Recommendation: yes, for now. Manual reset is enough until verticality/off-track states are deliberate gameplay.
+Use start-spawn reset for off-track/fall recovery. Recommendation: yes, because the current generated tracks do not need off-road driving or a terrain collider; if the car center misses road contact, reset immediately and keep the collision/handling model road-only.

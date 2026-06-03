@@ -96,7 +96,6 @@ mod tests {
     use bevy::state::app::StatesPlugin;
 
     use crate::hotseat::HotseatPlugin;
-    use crate::run::RunPlugin;
     use crate::shell::ShellPlugin;
 
     #[test]
@@ -104,7 +103,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, StatesPlugin));
         app.init_state::<GameState>();
-        app.add_plugins((RunPlugin, HotseatPlugin, ShellPlugin));
+        app.add_plugins((HotseatPlugin, ShellPlugin));
 
         app.update();
 

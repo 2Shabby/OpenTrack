@@ -19,13 +19,14 @@ pub struct TrackRoadSpan {
 
 #[derive(Clone, Debug)]
 pub struct TrackRailSpan {
-    pub points: Vec<Vec2>,
+    pub points: Vec<Vec3>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct TrackTriggerLine {
     pub marker: TrackPieceMarker,
     pub bounds: OrientedRect,
+    pub frame: PathFrame,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,9 +70,9 @@ impl TrackPiece {
 }
 
 fn road_span(frames: [PathFrame; 2]) -> TrackRoadSpan {
-    let entry = frames[0].pose;
-    let exit = frames[1].pose;
-    let length = entry.position.distance(exit.position);
+    let entry = frames[0];
+    let exit = frames[1];
+    let length = entry.center.distance(exit.center);
     let pose = Pose2::new(
         (entry.position + exit.position) * 0.5,
         midpoint_yaw(entry.yaw, exit.yaw),
@@ -84,17 +85,31 @@ fn road_span(frames: [PathFrame; 2]) -> TrackRoadSpan {
 }
 
 fn trigger_line(piece: &TrackPiece) -> Option<TrackTriggerLine> {
-    let (marker, pose) = match piece.kind {
-        TrackPieceKind::Straight | TrackPieceKind::DoubleStraight | TrackPieceKind::Turn { .. } => {
-            return None;
-        }
-        TrackPieceKind::Checkpoint(index) => (TrackPieceMarker::Checkpoint(index), piece.entry()),
-        TrackPieceKind::Finish => (TrackPieceMarker::Finish, piece.exit()),
+    let (marker, frame) = match piece.kind {
+        TrackPieceKind::Straight
+        | TrackPieceKind::DoubleStraight
+        | TrackPieceKind::BankTransition { .. }
+        | TrackPieceKind::BankedStraight { .. }
+        | TrackPieceKind::BankedDoubleStraight { .. }
+        | TrackPieceKind::Turn { .. }
+        | TrackPieceKind::BankedTurn { .. } => return None,
+        TrackPieceKind::Checkpoint(index) => (
+            TrackPieceMarker::Checkpoint(index),
+            *piece
+                .frames
+                .first()
+                .expect("checkpoint pieces require frames"),
+        ),
+        TrackPieceKind::Finish => (
+            TrackPieceMarker::Finish,
+            *piece.frames.last().expect("finish pieces require frames"),
+        ),
     };
 
     Some(TrackTriggerLine {
         marker,
-        bounds: OrientedRect::new(pose, Vec2::new(TRACK_WIDTH * 0.5, 0.45)),
+        bounds: OrientedRect::new(frame.connector().pose(), Vec2::new(TRACK_WIDTH * 0.5, 0.45)),
+        frame,
     })
 }
 

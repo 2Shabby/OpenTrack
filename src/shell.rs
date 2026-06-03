@@ -1,6 +1,5 @@
 mod main_menu;
 mod pause;
-mod results;
 mod setup;
 mod ui;
 
@@ -17,7 +16,6 @@ impl Plugin for ShellPlugin {
             .init_resource::<SessionSetup>()
             .add_systems(OnEnter(GameState::MainMenu), main_menu::spawn)
             .add_systems(OnEnter(GameState::Setup), setup::spawn)
-            .add_systems(OnEnter(GameState::Results), results::spawn)
             .add_systems(OnEnter(GameState::Driving), pause::clear)
             .add_systems(
                 OnExit(GameState::Driving),
@@ -34,14 +32,12 @@ impl Plugin for ShellPlugin {
             .add_systems(
                 Update,
                 (
-                    results::enter_after_finish,
                     pause::toggle_from_keyboard,
                     pause::sync_menu,
                     pause::handle_menu,
                 )
                     .run_if(in_state(GameState::Driving)),
             )
-            .add_systems(Update, results::handle.run_if(in_state(GameState::Results)))
             .add_systems(Update, request_primary_window_close)
             .add_systems(
                 OnExit(GameState::MainMenu),
@@ -50,10 +46,6 @@ impl Plugin for ShellPlugin {
             .add_systems(
                 OnExit(GameState::Setup),
                 despawn_screen::<setup::SetupEntity>,
-            )
-            .add_systems(
-                OnExit(GameState::Results),
-                despawn_screen::<results::ResultsEntity>,
             );
     }
 }
@@ -99,7 +91,6 @@ pub(super) struct SessionSetup {
     pub player_count: usize,
     pub seed: u64,
     pub piece_count: usize,
-    pub vehicle_index: usize,
 }
 
 impl Default for SessionSetup {
@@ -108,7 +99,6 @@ impl Default for SessionSetup {
             player_count: 2,
             seed: 0x5EED_2026,
             piece_count: 8,
-            vehicle_index: 0,
         }
     }
 }
@@ -121,7 +111,6 @@ mod tests {
     use crate::car_asset::VehicleSelection;
     use crate::driving::CarSpawn;
     use crate::hotseat::HotseatSession;
-    use crate::run::RunState;
     use crate::track::TrackRecipe;
 
     #[test]
@@ -132,7 +121,6 @@ mod tests {
         app.insert_resource(TrackRecipe::default());
         app.insert_resource(HotseatSession::default());
         app.insert_resource(VehicleSelection::default());
-        app.insert_resource(RunState::new(1));
         app.insert_resource(CarSpawn::default());
         app.insert_resource(ButtonInput::<KeyCode>::default());
         app.add_plugins(ShellPlugin);

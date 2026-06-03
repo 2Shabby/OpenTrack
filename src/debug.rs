@@ -3,9 +3,7 @@ use bevy::prelude::*;
 
 use crate::driving::PlayerCar;
 use crate::game_state::GameState;
-use crate::ghost::SessionBestGhost;
 use crate::hotseat::HotseatSession;
-use crate::run::RunState;
 use crate::track::{GeneratedRail, GeneratedRoadSurface, GeneratedTrackInfo, GeneratedTrigger};
 
 pub struct DebugPlugin;
@@ -58,8 +56,6 @@ fn despawn_debug_overlay(mut commands: Commands, overlays: Query<Entity, With<De
 #[derive(SystemParam)]
 struct DebugSnapshot<'w, 's> {
     car: Single<'w, 's, &'static PlayerCar>,
-    run: Res<'w, RunState>,
-    ghost: Res<'w, SessionBestGhost>,
     hotseat: Res<'w, HotseatSession>,
     track: Res<'w, GeneratedTrackInfo>,
     road_surfaces: Query<'w, 's, (), With<GeneratedRoadSurface>>,
@@ -82,20 +78,10 @@ fn update_debug_overlay(
     }
 
     let car = *snapshot.car;
-    let best = snapshot
-        .hotseat
-        .best_summary()
-        .map(|(name, finish_time)| format!("{name} {finish_time:.2}"))
-        .unwrap_or_else(|| "none".to_string());
-    let ghost_best = snapshot
-        .ghost
-        .finish_time()
-        .map(|time| format!("{time:.2}"))
-        .unwrap_or_else(|| "none".to_string());
     let boost_direction = car.boost_direction.unwrap_or(Vec3::ZERO);
 
     overlay.0.0 = format!(
-        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\ntarget: {:+5.1}\nmode: {}\nhandling: {}\ndrift: {} reason: {}\nyaw target/actual: {:+.2}/{:+.2}\ncollision: {}\nmove req/ok: {:>4.2}/{:>4.2}\nyaw req/ok: {:+.2}/{:+.2}\nhits: {} yaw limited: {}\nhit normal: {:+.2},{:+.2},{:+.2}\ndepen: {:>4.2}\nslip: {:>4.0} deg\nground: {} {}\nboost dir: {:+.2},{:+.2},{:+.2}\nwheels: {}\nsplit: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nrear brake: {:+.0}\nrear cost/yaw: {:.2}/{:+.2}\nwheel rpm: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\ntarget rpm: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\nwheel slip: {:+.2}/{:+.2}/{:+.2}/{:+.2}\nsusp comp: {:.2}/{:.2}/{:.2}/{:.2}\nsusp off: {:+.2}/{:+.2}/{:+.2}/{:+.2}\nload all/f/r: {:>5.0}/{:>5.0}/{:>5.0}\nload wheels: {:>4.0}/{:>4.0}/{:>4.0}/{:>4.0}\nfriction: {:>6.0}\nlong all/f/r: {:+6.0}/{:+6.0}/{:+6.0}\nlong wheels: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\nlat limit f/r: {:>6.0}/{:>6.0}\nlat limit wheels: {:>4.0}/{:>4.0}/{:>4.0}/{:>4.0}\nlat all/f/r: {:+6.0}/{:+6.0}/{:+6.0}\nlat wheels: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\nsat f/r/all: {:.2}/{:.2}/{:.2}\nsat wheels: {:.2}/{:.2}/{:.2}/{:.2}",
+        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nspeed: {:>5.1}\nsigned: {:+5.1}\ntarget: {:+5.1}\nmode: {}\nhandling: {}\ndrift: {} reason: {}\nsteer target/actual: {:+.2}/{:+.2}\nyaw target/actual: {:+.2}/{:+.2}\nfeedback pitch/load/slip: {:.2}/{:.2}/{:.2}\nfeedback rpm target/actual: {:>5.0}/{:>5.0}\ncollision: {}\nmove req/ok: {:>4.2}/{:>4.2}\nyaw req/ok: {:+.2}/{:+.2}\nhits: {} yaw limited: {}\nhit normal: {:+.2},{:+.2},{:+.2}\ndepen: {:>4.2}\nslip: {:>4.0} deg\nground: {} {}\nsupport: {} {} n={:+.2},{:+.2},{:+.2}\nboost dir: {:+.2},{:+.2},{:+.2}\nwheels: {}\nsplit: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nrear brake: {:+.0}\nrear cost/yaw: {:.2}/{:+.2}\nwheel rpm: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\ntarget rpm: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\nwheel slip: {:+.2}/{:+.2}/{:+.2}/{:+.2}\nsusp comp: {:.2}/{:.2}/{:.2}/{:.2}\nsusp off: {:+.2}/{:+.2}/{:+.2}/{:+.2}\nload all/f/r: {:>5.0}/{:>5.0}/{:>5.0}\nload wheels: {:>4.0}/{:>4.0}/{:>4.0}/{:>4.0}\nfriction: {:>6.0}\nlong all/f/r: {:+6.0}/{:+6.0}/{:+6.0}\nlong wheels: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\nlat limit f/r: {:>6.0}/{:>6.0}\nlat limit wheels: {:>4.0}/{:>4.0}/{:>4.0}/{:>4.0}\nlat all/f/r: {:+6.0}/{:+6.0}/{:+6.0}\nlat wheels: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\nsat f/r/all: {:.2}/{:.2}/{:.2}\nsat wheels: {:.2}/{:.2}/{:.2}/{:.2}",
         snapshot.track.seed,
         snapshot.track.piece_count,
         snapshot.track.checkpoint_count,
@@ -107,12 +93,6 @@ fn update_debug_overlay(
         snapshot.track.trigger_count,
         snapshot.hotseat.active_player_name(),
         snapshot.hotseat.player_count(),
-        best,
-        ghost_best,
-        snapshot.run.elapsed,
-        snapshot.run.status_label(),
-        snapshot.run.next_checkpoint,
-        snapshot.run.checkpoint_count,
         car.velocity.length(),
         car.signed_speed,
         car.tire_forces.target_speed,
@@ -120,8 +100,15 @@ fn update_debug_overlay(
         car.handling_state.label(),
         car.drift_assist.state.label(),
         car.tire_forces.slide_reason.label(),
+        car.wheel_steer_target_angle,
+        car.wheel_steer_angle,
         car.tire_forces.target_yaw_rate,
         car.yaw_rate,
+        car.vehicle_feedback.motor_pitch,
+        car.vehicle_feedback.motor_load,
+        car.vehicle_feedback.slip_intensity,
+        car.vehicle_feedback.target_wheel_speed_rpm,
+        car.vehicle_feedback.wheel_speed_rpm,
         car.collision_state.label(),
         car.collision_debug.requested_translation_delta.length(),
         car.collision_debug.accepted_translation_delta.length(),
@@ -136,6 +123,11 @@ fn update_debug_overlay(
         car.slip_angle.to_degrees(),
         car.ground_source.label(),
         car.current_surface.label(),
+        car.support_frame.state_label(),
+        car.support_frame.contact_count,
+        car.support_frame.normal.x,
+        car.support_frame.normal.y,
+        car.support_frame.normal.z,
         boost_direction.x,
         boost_direction.y,
         boost_direction.z,

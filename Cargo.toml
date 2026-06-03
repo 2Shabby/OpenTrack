@@ -6,13 +6,6 @@ edition = "2024"
 [dependencies]
 avian3d = "0.6"
 bevy = "0.18.1"
-bevy_egui = "0.39.1"
-bevy_obj = "0.18.2"
-bevy_procedural_meshes = { version = "0.18", features = ["lyon"] }
 bevy_ufbx = "0.18"
-kurbo = "0.13.1"
 rand = "0.9"
 rand_chacha = "0.9"
-ron = "0.10"
-serde = { version = "1", features = ["derive"] }
-

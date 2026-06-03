@@ -3,26 +3,19 @@ mod debug;
 mod driving;
 mod game_state;
 mod geometry;
-mod ghost;
 mod hotseat;
-mod hud;
 mod physics;
-mod run;
 mod shell;
 mod surface;
 mod track;
 
 use bevy::prelude::*;
-use bevy_obj::ObjPlugin;
 use bevy_ufbx::FbxPlugin;
 use car_asset::CarAssetPlugin;
 use debug::DebugPlugin;
 use driving::DrivingPlugin;
-use ghost::GhostPlugin;
 use hotseat::HotseatPlugin;
-use hud::HudPlugin;
 use physics::PhysicsQueriesPlugin;
-use run::RunPlugin;
 use shell::ShellPlugin;
 use surface::SurfacePlugin;
 use track::TrackPlugin;
@@ -38,7 +31,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins((FbxPlugin, ObjPlugin))
+        .add_plugins(FbxPlugin)
         .init_state::<game_state::GameState>()
         .add_plugins((
             SurfacePlugin,
@@ -46,10 +39,7 @@ fn main() {
             PhysicsQueriesPlugin,
             TrackPlugin,
             DrivingPlugin,
-            RunPlugin,
             HotseatPlugin,
-            GhostPlugin,
-            HudPlugin,
             DebugPlugin,
             ShellPlugin,
         ))

@@ -30,6 +30,7 @@ pub struct DrivingTuning {
     pub suspension_response: f32,
     pub suspension_visual_travel: f32,
     pub max_steer_angle: f32,
+    pub wheel_steer_response: f32,
     pub high_speed_steer_fade: f32,
     pub yaw_rate_response: f32,
     pub yaw_rate_damping: f32,
@@ -76,6 +77,7 @@ impl Default for DrivingTuning {
             suspension_response: 12.0,
             suspension_visual_travel: 0.10,
             max_steer_angle: 0.30,
+            wheel_steer_response: 16.0,
             high_speed_steer_fade: 0.035,
             yaw_rate_response: 9.0,
             yaw_rate_damping: 7.0,
@@ -263,8 +265,8 @@ impl ControlInput {
                 keys.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]),
             ),
             steer: axis(
-                keys.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]),
                 keys.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]),
+                keys.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]),
             ),
             rear_brake: if keys.any_pressed(rear_brake_keys) {
                 1.0
@@ -299,6 +301,11 @@ impl ControlIntent {
             steering_motion_direction: steering_motion_direction(input, basis),
             mode_steering_multiplier,
         }
+    }
+
+    pub fn with_wheel_steer_angle(mut self, wheel_steer_angle: f32) -> Self {
+        self.wheel_steer_angle = wheel_steer_angle;
+        self
     }
 }
 
@@ -342,6 +349,8 @@ pub struct TireForceInput<'a> {
     pub contact_friction: SurfaceFriction,
     pub boost_direction: Option<Vec3>,
     pub drift_assist: DriftAssist,
+    pub gravity_acceleration: Vec3,
+    pub normal_load_scale: f32,
 }
 
 impl Default for TireForces {
@@ -385,6 +394,15 @@ pub struct WheelTelemetry {
     pub slip_ratio: f32,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct VehicleFeedback {
+    pub motor_pitch: f32,
+    pub motor_load: f32,
+    pub wheel_speed_rpm: f32,
+    pub target_wheel_speed_rpm: f32,
+    pub slip_intensity: f32,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct WheelSuspension {
     pub compression: f32,
@@ -409,9 +427,23 @@ pub struct MotionBasis {
 }
 
 impl MotionBasis {
+    #[cfg(test)]
     pub fn from_yaw(yaw: f32, velocity: Vec3) -> Self {
-        let forward = forward_3d(yaw);
-        let right = right_3d(yaw);
+        Self::from_axes(forward_3d(yaw), right_3d(yaw), velocity)
+    }
+
+    pub fn from_ground(yaw: f32, normal: Vec3, velocity: Vec3) -> Self {
+        let normal = normal.normalize_or(Vec3::Y);
+        let flat_forward = forward_3d(yaw);
+        let forward = (flat_forward - normal * flat_forward.dot(normal)).normalize_or(flat_forward);
+        let right = normal.cross(forward).normalize_or(right_3d(yaw));
+
+        Self::from_axes(forward, right, velocity)
+    }
+
+    fn from_axes(forward: Vec3, right: Vec3, velocity: Vec3) -> Self {
+        let forward = forward.normalize_or(Vec3::Z);
+        let right = right.normalize_or(Vec3::X);
 
         Self {
             forward,
@@ -426,6 +458,18 @@ impl MotionBasis {
             .abs()
             .atan2(self.forward_speed.abs().max(0.001))
     }
+}
+
+pub fn gravity_acceleration(tuning: &DrivingTuning, normal: Vec3) -> Vec3 {
+    let normal = normal.normalize_or(Vec3::Y);
+    let gravity = Vec3::NEG_Y * tuning.gravity;
+    gravity - normal * gravity.dot(normal)
+}
+
+pub fn normal_load_scale(tuning: &DrivingTuning, normal: Vec3) -> f32 {
+    let normal = normal.normalize_or(Vec3::Y);
+    let gravity = Vec3::NEG_Y * tuning.gravity;
+    (-gravity.dot(normal) / tuning.gravity.max(0.001)).clamp(0.0, 1.25)
 }
 
 pub fn virtual_suspension(
@@ -457,6 +501,19 @@ fn resting_wheel_loads(tuning: &DrivingTuning) -> [f32; WHEEL_COUNT] {
     let rear = static_load * (1.0 - tuning.front_weight_bias) * 0.5;
 
     [front, front, rear, rear]
+}
+
+pub fn resolved_wheel_steer_angle(
+    tuning: &DrivingTuning,
+    current_angle: f32,
+    target_angle: f32,
+    dt: f32,
+) -> f32 {
+    let blend = 1.0 - (-tuning.wheel_steer_response * dt.max(0.0)).exp();
+
+    current_angle
+        .lerp(target_angle, blend)
+        .clamp(-tuning.max_steer_angle, tuning.max_steer_angle)
 }
 
 pub fn wheel_telemetry(
@@ -498,6 +555,48 @@ pub fn wheel_telemetry(
             slip_ratio,
         }
     })
+}
+
+pub fn vehicle_feedback(
+    tuning: &DrivingTuning,
+    wheel_telemetry: &[WheelTelemetry; WHEEL_COUNT],
+    tire_forces: &TireForces,
+) -> VehicleFeedback {
+    let front_actual_speed = axle_average_abs(wheel_telemetry, |wheel| wheel.angular_speed);
+    let front_target_speed = axle_average_abs(wheel_telemetry, |wheel| wheel.target_angular_speed);
+    let wheel_speed_rpm = radians_per_second_to_rpm(front_actual_speed);
+    let target_wheel_speed_rpm = radians_per_second_to_rpm(front_target_speed);
+    let motor_speed = front_actual_speed.max(front_target_speed);
+    let motor_pitch = (0.65 + motor_speed * tuning.wheel_radius / tuning.max_forward_speed * 1.35)
+        .clamp(0.55, 2.25);
+    let motor_load = force_ratio(tire_forces.front_longitudinal_force, tuning.engine_force);
+    let slip_intensity = wheel_telemetry
+        .iter()
+        .map(|wheel| (wheel.slip_ratio.abs() - 0.12).max(0.0) / 1.25)
+        .fold(0.0, f32::max)
+        .max((tire_forces.saturation - 1.0).max(0.0))
+        .clamp(0.0, 1.0);
+
+    VehicleFeedback {
+        motor_pitch,
+        motor_load,
+        wheel_speed_rpm,
+        target_wheel_speed_rpm,
+        slip_intensity,
+    }
+}
+
+fn axle_average_abs(
+    wheel_telemetry: &[WheelTelemetry; WHEEL_COUNT],
+    value: impl Fn(WheelTelemetry) -> f32,
+) -> f32 {
+    (value(wheel_telemetry[FRONT_LEFT_WHEEL]).abs()
+        + value(wheel_telemetry[FRONT_RIGHT_WHEEL]).abs())
+        * 0.5
+}
+
+fn radians_per_second_to_rpm(radians_per_second: f32) -> f32 {
+    radians_per_second * 60.0 / std::f32::consts::TAU
 }
 
 fn wheel_target_linear_speed(wheel_force: f32, target_speed: f32, forward_speed: f32) -> f32 {
@@ -552,9 +651,11 @@ pub fn tire_forces(input: TireForceInput<'_>) -> TireForces {
         contact_friction,
         boost_direction,
         drift_assist,
+        gravity_acceleration,
+        normal_load_scale,
     } = input;
 
-    let wheel_loads = wheel_loads(tuning, basis);
+    let wheel_loads = wheel_loads(tuning, basis, normal_load_scale);
     let normal_load = wheel_loads.iter().sum::<f32>();
     let front_normal_load = wheel_loads[FRONT_LEFT_WHEEL] + wheel_loads[FRONT_RIGHT_WHEEL];
     let rear_normal_load = wheel_loads[REAR_LEFT_WHEEL] + wheel_loads[REAR_RIGHT_WHEEL];
@@ -583,7 +684,7 @@ pub fn tire_forces(input: TireForceInput<'_>) -> TireForces {
     let rear_longitudinal_force =
         wheel_longitudinal_forces[REAR_LEFT_WHEEL] + wheel_longitudinal_forces[REAR_RIGHT_WHEEL];
     let requested_lateral = requested_lateral_force(tuning, surface, drift_assist, intent, basis);
-    let front_share = front_lateral_demand_share(intent);
+    let front_share = front_lateral_demand_share(tuning, intent);
     let front_request = requested_lateral * front_share;
     let rear_request = requested_lateral - front_request;
     let wheel_lateral_requests = split_lateral_requests(front_request, rear_request);
@@ -602,6 +703,7 @@ pub fn tire_forces(input: TireForceInput<'_>) -> TireForces {
     let acceleration = basis.forward
         * ((longitudinal_force - rolling_force - drag_force) / tuning.mass)
         + boost_acceleration
+        + gravity_acceleration
         - basis.right * (lateral_force / tuning.mass);
     let wheel_saturations = std::array::from_fn(|index| {
         wheel_saturation(
@@ -664,8 +766,12 @@ pub fn tire_forces(input: TireForceInput<'_>) -> TireForces {
     }
 }
 
-fn wheel_loads(tuning: &DrivingTuning, basis: &MotionBasis) -> [f32; WHEEL_COUNT] {
-    let static_load = tuning.mass * tuning.gravity;
+fn wheel_loads(
+    tuning: &DrivingTuning,
+    basis: &MotionBasis,
+    normal_load_scale: f32,
+) -> [f32; WHEEL_COUNT] {
+    let static_load = tuning.mass * tuning.gravity * normal_load_scale.max(0.0);
     let static_front = static_load * tuning.front_weight_bias;
     let static_rear = static_load - static_front;
     let longitudinal_transfer =
@@ -854,20 +960,21 @@ fn steering_target_yaw_rate(
     }
 
     let steer_fade = 1.0 / (1.0 + speed * tuning.high_speed_steer_fade);
-    let steer_angle =
-        intent.input.steer * tuning.max_steer_angle * steer_fade * intent.mode_steering_multiplier;
+    let steer_angle = intent.wheel_steer_angle * steer_fade * intent.mode_steering_multiplier;
     let front_grip = steering_front_grip(front_saturation);
     let yaw_rate = speed / tuning.wheelbase.max(0.001) * steer_angle.tan() * front_grip;
 
-    -intent.steering_motion_direction * yaw_rate
+    intent.steering_motion_direction * yaw_rate
 }
 
 fn steering_front_grip(front_saturation: f32) -> f32 {
     (1.0 - (front_saturation - 1.0).max(0.0) * 0.55).clamp(0.35, 1.0)
 }
 
-fn front_lateral_demand_share(intent: ControlIntent) -> f32 {
-    (0.50 + intent.input.steer.abs() * 0.16).clamp(0.46, 0.68)
+fn front_lateral_demand_share(tuning: &DrivingTuning, intent: ControlIntent) -> f32 {
+    let steering_fraction =
+        (intent.wheel_steer_angle.abs() / tuning.max_steer_angle.max(0.001)).clamp(0.0, 1.0);
+    (0.50 + steering_fraction * 0.16).clamp(0.46, 0.68)
 }
 
 fn split_lateral_requests(front_request: f32, rear_request: f32) -> [f32; WHEEL_COUNT] {
@@ -1131,19 +1238,21 @@ mod tests {
             contact_friction,
             boost_direction,
             drift_assist,
+            gravity_acceleration: gravity_acceleration(tuning, Vec3::Y),
+            normal_load_scale: normal_load_scale(tuning, Vec3::Y),
         })
     }
 
     #[test]
-    fn keyboard_steer_axis_maps_a_left_and_d_right() {
+    fn keyboard_steer_axis_matches_runtime_vehicle_direction() {
         let mut keys = ButtonInput::<KeyCode>::default();
 
         keys.press(KeyCode::KeyD);
-        assert_eq!(ControlInput::from_keys(&keys).steer, 1.0);
+        assert_eq!(ControlInput::from_keys(&keys).steer, -1.0);
 
         keys.release(KeyCode::KeyD);
         keys.press(KeyCode::KeyA);
-        assert_eq!(ControlInput::from_keys(&keys).steer, -1.0);
+        assert_eq!(ControlInput::from_keys(&keys).steer, 1.0);
     }
 
     #[test]
@@ -1230,8 +1339,8 @@ mod tests {
             friction,
         );
 
-        assert!(right_forces.target_yaw_rate < 0.0);
-        assert!(left_forces.target_yaw_rate > 0.0);
+        assert!(right_forces.target_yaw_rate > 0.0);
+        assert!(left_forces.target_yaw_rate < 0.0);
         assert!(right.wheel_steer_angle > 0.0);
         assert!(left.wheel_steer_angle < 0.0);
     }
@@ -1266,8 +1375,8 @@ mod tests {
         )
         .target_yaw_rate;
 
-        assert!(forward_yaw < 0.0);
-        assert!(reverse_yaw > 0.0);
+        assert!(forward_yaw > 0.0);
+        assert!(reverse_yaw < 0.0);
         assert!(reverse_yaw.abs() < forward_yaw.abs());
     }
 
@@ -1314,6 +1423,83 @@ mod tests {
 
         assert!(resolved > 0.0);
         assert!(resolved < target);
+    }
+
+    #[test]
+    fn wheel_steer_servo_is_not_instant() {
+        let tuning = DrivingTuning::default();
+        let resolved = resolved_wheel_steer_angle(&tuning, 0.0, tuning.max_steer_angle, 1.0 / 60.0);
+
+        assert!(resolved > 0.0);
+        assert!(resolved < tuning.max_steer_angle);
+    }
+
+    #[test]
+    fn tire_yaw_uses_resolved_wheel_steer_angle() {
+        let tuning = DrivingTuning::default();
+        let surfaces = SurfaceLibrary::default();
+        let surface = surfaces.get(SurfaceKind::Asphalt);
+        let basis = MotionBasis::from_yaw(0.0, Vec3::Z * 16.0);
+        let target = ControlIntent::from_input(&tuning, control_input(1.0, 1.0), &basis);
+        let barely_turned = target.with_wheel_steer_angle(tuning.max_steer_angle * 0.1);
+        let fully_turned = target.with_wheel_steer_angle(tuning.max_steer_angle);
+        let friction = SurfaceFriction::uniform(10.0, 10.0);
+
+        let small_yaw = tire_forces(
+            &tuning,
+            &surface,
+            barely_turned,
+            &basis,
+            HandlingState::Grip,
+            friction,
+        )
+        .target_yaw_rate
+        .abs();
+        let full_yaw = tire_forces(
+            &tuning,
+            &surface,
+            fully_turned,
+            &basis,
+            HandlingState::Grip,
+            friction,
+        )
+        .target_yaw_rate
+        .abs();
+
+        assert!(full_yaw > small_yaw * 4.0);
+    }
+
+    #[test]
+    fn vehicle_feedback_reports_motor_and_slip_signals() {
+        let tuning = DrivingTuning::default();
+        let mut tire_forces = TireForces {
+            front_longitudinal_force: tuning.engine_force * 0.5,
+            saturation: 1.25,
+            ..default()
+        };
+        tire_forces.wheel_longitudinal_forces[FRONT_LEFT_WHEEL] = tuning.engine_force * 0.25;
+        tire_forces.wheel_longitudinal_forces[FRONT_RIGHT_WHEEL] = tuning.engine_force * 0.25;
+        let wheel_telemetry = [
+            WheelTelemetry {
+                angular_speed: 80.0,
+                target_angular_speed: 120.0,
+                slip_ratio: 0.6,
+            },
+            WheelTelemetry {
+                angular_speed: 70.0,
+                target_angular_speed: 110.0,
+                slip_ratio: 0.5,
+            },
+            WheelTelemetry::default(),
+            WheelTelemetry::default(),
+        ];
+
+        let feedback = vehicle_feedback(&tuning, &wheel_telemetry, &tire_forces);
+
+        assert!(feedback.motor_pitch > 0.65);
+        assert!(feedback.motor_load > 0.0);
+        assert!(feedback.target_wheel_speed_rpm > feedback.wheel_speed_rpm);
+        assert!(feedback.slip_intensity > 0.0);
     }
 
     #[test]
@@ -1622,7 +1808,7 @@ mod tests {
     fn rolling_resistance_slows_coasting() {
         let tuning = DrivingTuning::default();
         let surfaces = SurfaceLibrary::default();
-        let surface = surfaces.get(SurfaceKind::Grass);
+        let surface = surfaces.get(SurfaceKind::Dirt);
         let basis = MotionBasis::from_yaw(0.0, Vec3::Z * 10.0);
         let intent = ControlIntent::from_input(&tuning, control_input(0.0, 0.0), &basis);
 
@@ -1642,7 +1828,7 @@ mod tests {
     fn rolling_resistance_does_not_push_from_rest() {
         let tuning = DrivingTuning::default();
         let surfaces = SurfaceLibrary::default();
-        let surface = surfaces.get(SurfaceKind::Grass);
+        let surface = surfaces.get(SurfaceKind::Dirt);
 
         assert_eq!(rolling_resistance_force(&tuning, &surface, 0.0), 0.0);
     }
@@ -1688,6 +1874,24 @@ mod tests {
 
         assert!(forces.acceleration.x > 0.0);
         assert!(forces.acceleration.z.abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn banked_ground_projects_gravity_and_reduces_normal_load() {
+        let tuning = DrivingTuning::default();
+        let normal = Vec3::new(
+            std::f32::consts::FRAC_1_SQRT_2,
+            std::f32::consts::FRAC_1_SQRT_2,
+            0.0,
+        );
+
+        let gravity = gravity_acceleration(&tuning, normal);
+        let load_scale = normal_load_scale(&tuning, normal);
+
+        assert!(gravity.x > 0.0);
+        assert!(gravity.y < 0.0);
+        assert!(load_scale < 1.0);
+        assert!(load_scale > 0.70);
     }
 
     #[test]
@@ -1850,7 +2054,7 @@ mod tests {
         );
 
         assert_eq!(forces.handling_state, HandlingState::Grip);
-        assert!(forces.target_yaw_rate < 0.0);
+        assert!(forces.target_yaw_rate > 0.0);
     }
 
     #[test]

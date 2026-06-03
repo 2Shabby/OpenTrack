@@ -1,34 +1,69 @@
 mod model;
+mod support;
 
 use avian3d::prelude::MoveAndSlide;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 pub use model::{DriftAssist, DriveMode, DrivingTuning, HandlingState};
+pub use support::{CAR_GROUND_OFFSET, VehicleSupportFrame, WheelContacts};
 
 use crate::game_state::{GameState, not_paused};
-use crate::geometry::{forward_3d, yaw_rotation};
+use crate::geometry::rotation_from_yaw_and_up;
 use crate::physics::{
     AvianTrackPhysicsQueries, CarCollisionDebug, CarPose, CollisionState, GroundContact,
     GroundSource, RoadCollider, TrackPhysicsQueries,
 };
 use crate::surface::{SurfaceKind, SurfaceLibrary};
+use support::sample_vehicle_support;
 
-const DEFAULT_CAR_START: Vec3 = Vec3::new(0.0, 0.05, -26.0);
-const WHEEL_SAMPLE_HALF_WIDTH: f32 = 0.82;
-const WHEEL_SAMPLE_HALF_LENGTH: f32 = 1.72;
+const DEFAULT_CAR_START: Vec3 = Vec3::new(0.0, CAR_GROUND_OFFSET, -26.0);
 const BODY_SUSPENSION_ROLL_SCALE: f32 = 0.16;
 const BODY_SUSPENSION_PITCH_SCALE: f32 = 0.12;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
+const SPORTS_CAR_ASSET_SCALE: f32 = 0.01;
+const SPORTS_CAR_FRONT_WHEEL_OUTSET: f32 = 0.18;
+const SPORTS_CAR_REAR_WHEEL_WIDTH_SCALE: f32 = 1.16;
+const SPORTS_CAR_VISUAL_STEER_MULTIPLIER: f32 = 2.0;
+const SPORTS_CAR_MAX_VISUAL_STEER: f32 = 0.62;
 const CAMERA_VELOCITY_BLEND_SPEED: f32 = 24.0;
 const CAMERA_MAX_VELOCITY_BLEND: f32 = 0.55;
+const DRIVE_DEBUG_LOG_INTERVAL: f32 = 0.5;
 const WHEEL_CONTACT_COUNT: usize = model::WHEEL_COUNT;
-const WHEEL_CONTACT_LABELS: [&str; WHEEL_CONTACT_COUNT] = ["FL", "FR", "RL", "RR"];
+
+type VehicleMaterialNodes<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static MeshMaterial3d<StandardMaterial>),
+    (With<Mesh3d>, Without<VehicleMaterialChecked>),
+>;
+type VehicleWheelCandidates<'w, 's> =
+    Query<'w, 's, (Entity, &'static Transform), (With<Mesh3d>, Without<AssetWheelVisual>)>;
+type VehicleSceneRoots<'w, 's> = Query<'w, 's, (), With<VehicleSceneRoot>>;
+type SceneParents<'w, 's> = Query<'w, 's, &'static ChildOf>;
+
+#[derive(Default)]
+struct DriveDebugLogState {
+    elapsed: f32,
+}
+
+struct DriveDebugSnapshot<'a> {
+    input: model::ControlInput,
+    force_basis: &'a model::MotionBasis,
+    movement_basis: &'a model::MotionBasis,
+    ground: GroundContact,
+    resolved_ground: GroundContact,
+    support_frame: VehicleSupportFrame,
+    desired_yaw: f32,
+    car: &'a PlayerCar,
+    transform: &'a Transform,
+}
 
 #[derive(Clone, Copy, Resource)]
 pub struct CarSpawn {
     pub translation: Vec3,
     pub yaw: f32,
+    pub up: Vec3,
 }
 
 impl Default for CarSpawn {
@@ -36,13 +71,18 @@ impl Default for CarSpawn {
         Self {
             translation: DEFAULT_CAR_START,
             yaw: 0.0,
+            up: Vec3::Y,
         }
     }
 }
 
 impl CarSpawn {
     pub fn rotation(self) -> Quat {
-        yaw_rotation(self.yaw)
+        rotation_from_yaw_and_up(self.yaw, self.up)
+    }
+
+    pub fn transform(self) -> Transform {
+        Transform::from_translation(self.translation).with_rotation(self.rotation())
     }
 }
 
@@ -61,6 +101,7 @@ impl Plugin for DrivingPlugin {
                 (
                     update_car_body_visual,
                     bind_imported_vehicle_wheels,
+                    normalize_vehicle_materials,
                     update_imported_wheel_visuals,
                     chase_camera,
                 )
@@ -80,9 +121,11 @@ pub struct PlayerCar {
     pub current_surface: SurfaceKind,
     pub ground_source: GroundSource,
     pub boost_direction: Option<Vec3>,
+    pub support_frame: VehicleSupportFrame,
     pub throttle: f32,
     pub steer: f32,
     pub rear_brake: f32,
+    pub wheel_steer_target_angle: f32,
     pub wheel_steer_angle: f32,
     pub signed_speed: f32,
     pub slip_angle: f32,
@@ -95,6 +138,7 @@ pub struct PlayerCar {
     pub wheel_telemetry: [model::WheelTelemetry; WHEEL_CONTACT_COUNT],
     pub wheel_suspension: [model::WheelSuspension; WHEEL_CONTACT_COUNT],
     pub wheel_spin_angles: [f32; WHEEL_CONTACT_COUNT],
+    pub vehicle_feedback: model::VehicleFeedback,
     pub tire_forces: model::TireForces,
 }
 
@@ -108,9 +152,11 @@ impl Default for PlayerCar {
             current_surface: SurfaceKind::Asphalt,
             ground_source: GroundSource::Road,
             boost_direction: None,
+            support_frame: VehicleSupportFrame::default(),
             throttle: 0.0,
             steer: 0.0,
             rear_brake: 0.0,
+            wheel_steer_target_angle: 0.0,
             wheel_steer_angle: 0.0,
             signed_speed: 0.0,
             slip_angle: 0.0,
@@ -123,6 +169,7 @@ impl Default for PlayerCar {
             wheel_telemetry: [model::WheelTelemetry::default(); WHEEL_CONTACT_COUNT],
             wheel_suspension: [model::WheelSuspension::default(); WHEEL_CONTACT_COUNT],
             wheel_spin_angles: [0.0; WHEEL_CONTACT_COUNT],
+            vehicle_feedback: model::VehicleFeedback::default(),
             tire_forces: model::TireForces::default(),
         }
     }
@@ -132,9 +179,9 @@ impl PlayerCar {
     pub fn reset_to_spawn(&mut self, transform: &mut Transform, car_spawn: CarSpawn) {
         *self = Self::default();
         self.yaw = car_spawn.yaw;
+        self.support_frame = VehicleSupportFrame::from_spawn(car_spawn);
         self.previous_translation = car_spawn.translation;
-        transform.translation = car_spawn.translation;
-        transform.rotation = car_spawn.rotation();
+        *transform = car_spawn.transform();
     }
 }
 
@@ -145,9 +192,15 @@ pub struct ChaseCamera;
 pub struct VehicleSceneRoot;
 
 #[derive(Component)]
+struct VehicleMaterialChecked;
+
+#[derive(Component)]
 pub struct AssetWheelVisual {
     base_rotation: Quat,
     base_translation: Vec3,
+    base_scale: Vec3,
+    visual_translation_offset: Vec3,
+    visual_scale: Vec3,
     role: AssetWheelRole,
 }
 
@@ -156,79 +209,6 @@ enum AssetWheelRole {
     FrontLeft,
     FrontRight,
     Rear,
-}
-
-#[derive(Clone, Copy)]
-pub struct WheelContacts {
-    contacts: [GroundContact; WHEEL_CONTACT_COUNT],
-}
-
-impl Default for WheelContacts {
-    fn default() -> Self {
-        let contact = GroundContact {
-            source: GroundSource::Road,
-            surface: SurfaceKind::Asphalt,
-            boost_direction: None,
-        };
-        Self {
-            contacts: [contact; WHEEL_CONTACT_COUNT],
-        }
-    }
-}
-
-impl WheelContacts {
-    fn sample(
-        physics: &impl TrackPhysicsQueries,
-        center: Vec3,
-        basis: &model::MotionBasis,
-    ) -> Self {
-        let front = basis.forward * WHEEL_SAMPLE_HALF_LENGTH;
-        let rear = -basis.forward * WHEEL_SAMPLE_HALF_LENGTH;
-        let left = -basis.right * WHEEL_SAMPLE_HALF_WIDTH;
-        let right = basis.right * WHEEL_SAMPLE_HALF_WIDTH;
-
-        Self {
-            contacts: [
-                physics.ground_at(center + front + left),
-                physics.ground_at(center + front + right),
-                physics.ground_at(center + rear + left),
-                physics.ground_at(center + rear + right),
-            ],
-        }
-    }
-
-    pub fn summary(self) -> String {
-        WHEEL_CONTACT_LABELS
-            .iter()
-            .zip(self.contacts)
-            .map(|(label, contact)| format!("{label}:{}", contact.label()))
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-
-    pub fn friction(self, surfaces: &SurfaceLibrary) -> model::SurfaceFriction {
-        model::SurfaceFriction {
-            wheels: self.contacts.map(|contact| {
-                let surface = surfaces.get(contact.surface);
-                model::WheelFriction {
-                    longitudinal: surface.longitudinal_friction,
-                    lateral: surface.lateral_friction,
-                }
-            }),
-        }
-    }
-
-    pub fn split_surface(self) -> bool {
-        self.contacts[1..]
-            .iter()
-            .any(|contact| *contact != self.contacts[0])
-    }
-}
-
-impl GroundContact {
-    fn label(self) -> String {
-        format!("{}:{}", self.source.label(), self.surface.label())
-    }
 }
 
 #[derive(SystemParam)]
@@ -242,9 +222,18 @@ struct DrivingContext<'w, 's> {
     roads: Query<'w, 's, (Entity, &'static RoadCollider)>,
 }
 
-fn drive_car(ctx: DrivingContext, mut cars: Query<(Entity, &mut Transform, &mut PlayerCar)>) {
+fn drive_car(
+    ctx: DrivingContext,
+    mut debug_log: Local<DriveDebugLogState>,
+    mut cars: Query<(Entity, &mut Transform, &mut PlayerCar)>,
+) {
     let dt = ctx.time.delta_secs();
     let physics = AvianTrackPhysicsQueries::new(&ctx.move_and_slide, &ctx.roads);
+    debug_log.elapsed += dt;
+    let should_log = debug_log.elapsed >= DRIVE_DEBUG_LOG_INTERVAL;
+    if should_log {
+        debug_log.elapsed = 0.0;
+    }
 
     for (entity, mut transform, mut car) in &mut cars {
         if ctx.keys.just_pressed(KeyCode::KeyR) {
@@ -258,30 +247,62 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(Entity, &mut Transform, &mut 
         car.throttle = input.throttle;
         car.steer = input.steer;
         car.rear_brake = input.rear_brake;
-        let ground = physics.ground_at(transform.translation);
-        car.current_surface = ground.surface;
-        car.ground_source = ground.source;
-        car.boost_direction = ground.boost_direction;
+        let support_sample = sample_vehicle_support(
+            &physics,
+            car.yaw,
+            transform.translation,
+            car.velocity,
+            car.support_frame.normal,
+            car.support_frame,
+        );
+        if support_sample.is_airborne_offtrack() {
+            log_offtrack_reset(
+                "center",
+                entity,
+                transform.translation,
+                support_sample.center_ground,
+            );
+            car.reset_to_spawn(&mut transform, *ctx.car_spawn);
+            continue;
+        }
+        let support_frame = car
+            .support_frame
+            .resolved_towards(support_sample.target, car.yaw, dt);
+        car.support_frame = support_frame;
+        car.wheel_contacts = support_sample.contacts;
+        car.current_surface = support_frame.surface;
+        car.ground_source = support_frame.ground_source(support_sample.center_ground);
+        car.boost_direction = support_frame.boost_direction;
 
         let surface = ctx.surfaces.get(car.current_surface);
-        let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
-        car.wheel_contacts = WheelContacts::sample(&physics, transform.translation, &basis);
         let contact_friction = car.wheel_contacts.friction(&ctx.surfaces);
-        car.signed_speed = basis.forward_speed;
-        car.slip_angle = basis.slip_angle();
-        let intent = model::ControlIntent::from_input(&ctx.tuning, input, &basis);
-        car.drift_assist = model::DriftAssist::from_input(&ctx.tuning, &surface, input, &basis);
-        car.drive_mode = intent.drive_mode;
-        car.wheel_steer_angle = intent.wheel_steer_angle;
+        let force_basis =
+            model::MotionBasis::from_ground(car.yaw, car.support_frame.normal, car.velocity);
+        car.signed_speed = force_basis.forward_speed;
+        car.slip_angle = force_basis.slip_angle();
+        let target_intent = model::ControlIntent::from_input(&ctx.tuning, input, &force_basis);
+        car.drift_assist =
+            model::DriftAssist::from_input(&ctx.tuning, &surface, input, &force_basis);
+        car.drive_mode = target_intent.drive_mode;
+        car.wheel_steer_target_angle = target_intent.wheel_steer_angle;
+        car.wheel_steer_angle = model::resolved_wheel_steer_angle(
+            &ctx.tuning,
+            car.wheel_steer_angle,
+            car.wheel_steer_target_angle,
+            dt,
+        );
+        let intent = target_intent.with_wheel_steer_angle(car.wheel_steer_angle);
         let tire_forces = model::tire_forces(model::TireForceInput {
             tuning: &ctx.tuning,
             surface: &surface,
             intent,
-            basis: &basis,
+            basis: &force_basis,
             previous_handling_state: car.handling_state,
             contact_friction,
-            boost_direction: ground.boost_direction,
+            boost_direction: support_frame.boost_direction,
             drift_assist: car.drift_assist,
+            gravity_acceleration: model::gravity_acceleration(&ctx.tuning, support_frame.normal),
+            normal_load_scale: model::normal_load_scale(&ctx.tuning, support_frame.normal),
         });
         car.tire_forces = tire_forces;
         car.handling_state = tire_forces.handling_state;
@@ -290,14 +311,17 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(Entity, &mut Transform, &mut 
         let desired_yaw = car.yaw + car.yaw_rate * dt;
         car.velocity += tire_forces.acceleration * dt;
 
-        let basis = model::MotionBasis::from_yaw(desired_yaw, car.velocity);
+        let movement_basis =
+            model::MotionBasis::from_ground(desired_yaw, support_frame.normal, car.velocity);
         let capped_forward_speed = car
             .velocity
-            .dot(basis.forward)
+            .dot(movement_basis.forward)
             .clamp(-ctx.tuning.max_reverse_speed, ctx.tuning.max_forward_speed);
-        let capped_lateral_speed = car.velocity.dot(basis.right);
-        car.velocity = basis.forward * capped_forward_speed + basis.right * capped_lateral_speed;
-        let wheel_basis = model::MotionBasis::from_yaw(desired_yaw, car.velocity);
+        let capped_lateral_speed = car.velocity.dot(movement_basis.right);
+        car.velocity = movement_basis.forward * capped_forward_speed
+            + movement_basis.right * capped_lateral_speed;
+        let wheel_basis =
+            model::MotionBasis::from_ground(desired_yaw, support_frame.normal, car.velocity);
         car.wheel_telemetry = model::wheel_telemetry(
             &ctx.tuning,
             car.wheel_telemetry,
@@ -310,33 +334,178 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(Entity, &mut Transform, &mut 
         for index in 0..WHEEL_CONTACT_COUNT {
             car.wheel_spin_angles[index] += car.wheel_telemetry[index].angular_speed * dt;
         }
+        car.vehicle_feedback =
+            model::vehicle_feedback(&ctx.tuning, &car.wheel_telemetry, &tire_forces);
 
         let current_translation = transform.translation;
         let desired_translation = current_translation + car.velocity * dt;
+        let desired_sample = sample_vehicle_support(
+            &physics,
+            desired_yaw,
+            desired_translation,
+            car.velocity,
+            support_frame.normal,
+            support_frame,
+        );
         let resolution = physics.resolve_car_pose(
             CarPose {
                 translation: current_translation,
                 yaw: car.yaw,
+                up: support_frame.normal,
             },
             CarPose {
                 translation: desired_translation,
                 yaw: desired_yaw,
+                up: desired_sample.target.normal,
             },
             car.velocity,
             ctx.time.delta(),
             entity,
         );
-        let mut next_translation = resolution.pose.translation;
+        let resolved_sample = sample_vehicle_support(
+            &physics,
+            resolution.pose.yaw,
+            resolution.pose.translation,
+            resolution.velocity,
+            resolution.pose.up,
+            support_frame,
+        );
+        if resolved_sample.is_airborne_offtrack() {
+            log_offtrack_reset(
+                "resolved",
+                entity,
+                resolution.pose.translation,
+                resolved_sample.center_ground,
+            );
+            car.reset_to_spawn(&mut transform, *ctx.car_spawn);
+            continue;
+        }
 
-        next_translation.y = ctx.car_spawn.translation.y;
+        let resolved_support =
+            support_frame.resolved_towards(resolved_sample.target, resolution.pose.yaw, dt);
+        let next_translation = resolved_support.supported_center(resolution.pose.translation);
+        let next_velocity = project_onto_plane(resolution.velocity, resolved_support.normal);
         car.yaw = resolution.pose.yaw;
         car.yaw_rate = accepted_yaw_rate(&resolution.debug, dt);
-        car.velocity = resolution.velocity;
+        car.velocity = next_velocity;
         car.collision_state = resolution.state;
         car.collision_debug = resolution.debug;
+        car.support_frame = resolved_support;
+        car.wheel_contacts = resolved_sample.contacts;
+        car.current_surface = resolved_support.surface;
+        car.ground_source = resolved_support.ground_source(resolved_sample.center_ground);
+        car.boost_direction = resolved_support.boost_direction;
         transform.translation = next_translation;
-        transform.rotation = yaw_rotation(car.yaw);
+        transform.rotation = resolved_support.rotation;
+        if should_log {
+            log_drive_debug(DriveDebugSnapshot {
+                input,
+                force_basis: &force_basis,
+                movement_basis: &movement_basis,
+                ground: support_sample.center_ground,
+                resolved_ground: resolved_sample.center_ground,
+                support_frame: resolved_support,
+                desired_yaw,
+                car: &car,
+                transform: &transform,
+            });
+        }
     }
+}
+
+fn log_drive_debug(snapshot: DriveDebugSnapshot<'_>) {
+    let car_up = snapshot.transform.rotation * Vec3::Y;
+    info!(
+        target: "drive_debug",
+        "ad_map=A:+1,D:-1 input(throttle={:+.0},steer={:+.0},rear={:+.0}) \
+    pos=({:+.2},{:+.2},{:+.2}) vel=({:+.2},{:+.2},{:+.2}) speed={:.2} signed={:+.2} \
+    yaw(current={:+.3},desired={:+.3},rate_target={:+.3},rate_actual={:+.3}) \
+    steer(target={:+.3},actual={:+.3}) basis_force(f=({:+.2},{:+.2},{:+.2}),r=({:+.2},{:+.2},{:+.2})) \
+    basis_move(f=({:+.2},{:+.2},{:+.2}),r=({:+.2},{:+.2},{:+.2})) \
+    ground={} n=({:+.2},{:+.2},{:+.2}) resolved={} n=({:+.2},{:+.2},{:+.2}) support={} contacts={} n=({:+.2},{:+.2},{:+.2}) f=({:+.2},{:+.2},{:+.2}) r=({:+.2},{:+.2},{:+.2}) car_up=({:+.2},{:+.2},{:+.2}) \
+    handling={} slide={} collision={} yaw_req/ok={:+.3}/{:+.3} move_req/ok={:.2}/{:.2} wheels={} split={}",
+        snapshot.input.throttle,
+        snapshot.input.steer,
+        snapshot.input.rear_brake,
+        snapshot.transform.translation.x,
+        snapshot.transform.translation.y,
+        snapshot.transform.translation.z,
+        snapshot.car.velocity.x,
+        snapshot.car.velocity.y,
+        snapshot.car.velocity.z,
+        snapshot.car.velocity.length(),
+        snapshot.car.signed_speed,
+        snapshot.car.yaw,
+        snapshot.desired_yaw,
+        snapshot.car.tire_forces.target_yaw_rate,
+        snapshot.car.yaw_rate,
+        snapshot.car.wheel_steer_target_angle,
+        snapshot.car.wheel_steer_angle,
+        snapshot.force_basis.forward.x,
+        snapshot.force_basis.forward.y,
+        snapshot.force_basis.forward.z,
+        snapshot.force_basis.right.x,
+        snapshot.force_basis.right.y,
+        snapshot.force_basis.right.z,
+        snapshot.movement_basis.forward.x,
+        snapshot.movement_basis.forward.y,
+        snapshot.movement_basis.forward.z,
+        snapshot.movement_basis.right.x,
+        snapshot.movement_basis.right.y,
+        snapshot.movement_basis.right.z,
+        snapshot.ground.label(),
+        snapshot.ground.normal.x,
+        snapshot.ground.normal.y,
+        snapshot.ground.normal.z,
+        snapshot.resolved_ground.label(),
+        snapshot.resolved_ground.normal.x,
+        snapshot.resolved_ground.normal.y,
+        snapshot.resolved_ground.normal.z,
+        snapshot.support_frame.state_label(),
+        snapshot.support_frame.contact_count,
+        snapshot.support_frame.normal.x,
+        snapshot.support_frame.normal.y,
+        snapshot.support_frame.normal.z,
+        snapshot.support_frame.forward.x,
+        snapshot.support_frame.forward.y,
+        snapshot.support_frame.forward.z,
+        snapshot.support_frame.right.x,
+        snapshot.support_frame.right.y,
+        snapshot.support_frame.right.z,
+        car_up.x,
+        car_up.y,
+        car_up.z,
+        snapshot.car.handling_state.label(),
+        snapshot.car.tire_forces.slide_reason.label(),
+        snapshot.car.collision_state.label(),
+        snapshot.car.collision_debug.requested_yaw_delta,
+        snapshot.car.collision_debug.accepted_yaw_delta,
+        snapshot.car.collision_debug.requested_translation_delta.length(),
+        snapshot.car.collision_debug.accepted_translation_delta.length(),
+        snapshot.car.wheel_contacts.summary(),
+        snapshot.car.wheel_contacts.split_surface(),
+    );
+}
+
+fn log_offtrack_reset(phase: &str, entity: Entity, position: Vec3, ground: GroundContact) {
+    info!(
+        target: "drive_debug",
+        "offtrack_reset phase={} entity={:?} pos=({:+.2},{:+.2},{:+.2}) ground={} n=({:+.2},{:+.2},{:+.2})",
+        phase,
+        entity,
+        position.x,
+        position.y,
+        position.z,
+        ground.label(),
+        ground.normal.x,
+        ground.normal.y,
+        ground.normal.z,
+    );
+}
+
+fn project_onto_plane(value: Vec3, normal: Vec3) -> Vec3 {
+    let normal = normal.normalize_or(Vec3::Y);
+    value - normal * value.dot(normal)
 }
 
 fn accepted_yaw_rate(debug: &CarCollisionDebug, dt: f32) -> f32 {
@@ -354,25 +523,57 @@ fn update_car_body_visual(
     let (car_transform, car_state) = *car;
     let (roll, pitch) = body_suspension_attitude(car_state);
 
-    body.translation = car_transform.translation + Vec3::Y * BODY_VISUAL_HEIGHT;
+    body.translation =
+        car_transform.translation + car_state.support_frame.normal * BODY_VISUAL_HEIGHT;
     body.rotation =
-        yaw_rotation(car_state.yaw) * Quat::from_rotation_z(roll) * Quat::from_rotation_x(pitch);
+        car_transform.rotation * Quat::from_rotation_z(roll) * Quat::from_rotation_x(pitch);
 }
 
 fn bind_imported_vehicle_wheels(
     mut commands: Commands,
-    wheels: Query<(Entity, &Name, &Transform), Without<AssetWheelVisual>>,
+    wheels: VehicleWheelCandidates,
+    vehicle_roots: VehicleSceneRoots,
+    parents: SceneParents,
 ) {
-    for (entity, name, transform) in &wheels {
-        let Some(role) = imported_wheel_role(name.as_str()) else {
+    for (entity, transform) in &wheels {
+        if !is_vehicle_scene_descendant(entity, &vehicle_roots, &parents) {
+            continue;
+        }
+
+        let Some(role) = sports_car_wheel_role_from_transform(transform) else {
             continue;
         };
 
         commands.entity(entity).insert(AssetWheelVisual {
             base_rotation: transform.rotation,
             base_translation: transform.translation,
+            base_scale: transform.scale,
+            visual_translation_offset: asset_wheel_translation_offset(role),
+            visual_scale: asset_wheel_role_scale(role),
             role,
         });
+    }
+}
+
+fn normalize_vehicle_materials(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    material_nodes: VehicleMaterialNodes,
+    vehicle_roots: VehicleSceneRoots,
+    parents: SceneParents,
+) {
+    for (entity, material_handle) in &material_nodes {
+        if !is_vehicle_scene_descendant(entity, &vehicle_roots, &parents) {
+            continue;
+        }
+
+        let Some(material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+        material.base_color.set_alpha(1.0);
+        material.alpha_mode = AlphaMode::Opaque;
+
+        commands.entity(entity).insert(VehicleMaterialChecked);
     }
 }
 
@@ -384,8 +585,11 @@ fn update_imported_wheel_visuals(
         let steer_angle = asset_wheel_steer(car.wheel_steer_angle, wheel.role);
         let spin = asset_wheel_spin(&car, wheel.role);
         let suspension_offset = asset_wheel_suspension_offset(&car, wheel.role);
-        transform.translation = wheel.base_translation + Vec3::Y * suspension_offset;
+        transform.translation =
+            wheel.base_translation + wheel.visual_translation_offset + Vec3::Y * suspension_offset;
         transform.rotation = asset_wheel_rotation(wheel.base_rotation, steer_angle, spin);
+        transform.scale =
+            wheel.base_scale * wheel.visual_scale * asset_wheel_load_scale(&car, wheel.role);
     }
 }
 
@@ -411,8 +615,25 @@ fn body_suspension_attitude(car: &PlayerCar) -> (f32, f32) {
 
 fn asset_wheel_steer(wheel_steer_angle: f32, role: AssetWheelRole) -> f32 {
     match role {
-        AssetWheelRole::FrontLeft | AssetWheelRole::FrontRight => wheel_steer_angle,
+        AssetWheelRole::FrontLeft | AssetWheelRole::FrontRight => (wheel_steer_angle
+            * SPORTS_CAR_VISUAL_STEER_MULTIPLIER)
+            .clamp(-SPORTS_CAR_MAX_VISUAL_STEER, SPORTS_CAR_MAX_VISUAL_STEER),
         AssetWheelRole::Rear => 0.0,
+    }
+}
+
+fn asset_wheel_translation_offset(role: AssetWheelRole) -> Vec3 {
+    match role {
+        AssetWheelRole::FrontLeft => Vec3::X * SPORTS_CAR_FRONT_WHEEL_OUTSET,
+        AssetWheelRole::FrontRight => Vec3::NEG_X * SPORTS_CAR_FRONT_WHEEL_OUTSET,
+        AssetWheelRole::Rear => Vec3::ZERO,
+    }
+}
+
+fn asset_wheel_role_scale(role: AssetWheelRole) -> Vec3 {
+    match role {
+        AssetWheelRole::FrontLeft | AssetWheelRole::FrontRight => Vec3::ONE,
+        AssetWheelRole::Rear => Vec3::new(SPORTS_CAR_REAR_WHEEL_WIDTH_SCALE, 1.0, 1.0),
     }
 }
 
@@ -428,6 +649,15 @@ fn asset_wheel_spin(car: &PlayerCar, role: AssetWheelRole) -> f32 {
     }
 }
 
+fn asset_wheel_load_scale(car: &PlayerCar, role: AssetWheelRole) -> Vec3 {
+    let load = (asset_wheel_suspension_compression(car, role) - 0.5).clamp(-0.35, 0.45);
+    let slip = asset_wheel_slip(car, role).clamp(0.0, 1.0);
+    let sidewall = (1.0 - load * 0.08).clamp(0.94, 1.04);
+    let radius = (1.0 + load * 0.04 + slip * 0.015).clamp(0.97, 1.05);
+
+    Vec3::new(1.0, sidewall, radius)
+}
+
 fn asset_wheel_suspension_offset(car: &PlayerCar, role: AssetWheelRole) -> f32 {
     match role {
         AssetWheelRole::FrontLeft => car.wheel_suspension[model::FRONT_LEFT_WHEEL].visual_offset,
@@ -440,20 +670,80 @@ fn asset_wheel_suspension_offset(car: &PlayerCar, role: AssetWheelRole) -> f32 {
     }
 }
 
-fn asset_wheel_rotation(base_rotation: Quat, steer_angle: f32, spin: f32) -> Quat {
-    base_rotation * Quat::from_rotation_y(steer_angle) * Quat::from_rotation_x(spin)
+fn asset_wheel_suspension_compression(car: &PlayerCar, role: AssetWheelRole) -> f32 {
+    match role {
+        AssetWheelRole::FrontLeft => car.wheel_suspension[model::FRONT_LEFT_WHEEL].compression,
+        AssetWheelRole::FrontRight => car.wheel_suspension[model::FRONT_RIGHT_WHEEL].compression,
+        AssetWheelRole::Rear => {
+            (car.wheel_suspension[model::REAR_LEFT_WHEEL].compression
+                + car.wheel_suspension[model::REAR_RIGHT_WHEEL].compression)
+                * 0.5
+        }
+    }
 }
 
-fn imported_wheel_role(name: &str) -> Option<AssetWheelRole> {
-    if name.contains("FrontLeftWheel") {
+fn asset_wheel_slip(car: &PlayerCar, role: AssetWheelRole) -> f32 {
+    match role {
+        AssetWheelRole::FrontLeft => car.wheel_telemetry[model::FRONT_LEFT_WHEEL]
+            .slip_ratio
+            .abs(),
+        AssetWheelRole::FrontRight => car.wheel_telemetry[model::FRONT_RIGHT_WHEEL]
+            .slip_ratio
+            .abs(),
+        AssetWheelRole::Rear => {
+            (car.wheel_telemetry[model::REAR_LEFT_WHEEL].slip_ratio.abs()
+                + car.wheel_telemetry[model::REAR_RIGHT_WHEEL]
+                    .slip_ratio
+                    .abs())
+                * 0.5
+        }
+    }
+}
+
+fn asset_wheel_rotation(base_rotation: Quat, steer_angle: f32, spin: f32) -> Quat {
+    Quat::from_rotation_y(steer_angle) * base_rotation * Quat::from_rotation_x(spin)
+}
+
+fn sports_car_wheel_role_from_transform(transform: &Transform) -> Option<AssetWheelRole> {
+    if !is_sports_car_import_scale(transform.scale) {
+        return None;
+    }
+
+    let position = transform.translation;
+    if position.z > 0.8 && position.x > 0.3 {
         Some(AssetWheelRole::FrontLeft)
-    } else if name.contains("FrontRightWheel") {
+    } else if position.z > 0.8 && position.x < -0.3 {
         Some(AssetWheelRole::FrontRight)
-    } else if name.contains("BackWheels") {
+    } else if position.z < -0.8 && position.x.abs() < 0.25 {
         Some(AssetWheelRole::Rear)
     } else {
         None
     }
+}
+
+fn is_vehicle_scene_descendant(
+    entity: Entity,
+    vehicle_roots: &VehicleSceneRoots,
+    parents: &SceneParents,
+) -> bool {
+    let mut current = entity;
+    for _ in 0..32 {
+        if vehicle_roots.get(current).is_ok() {
+            return true;
+        }
+
+        let Ok(parent) = parents.get(current) else {
+            return false;
+        };
+        current = parent.parent();
+    }
+    false
+}
+
+fn is_sports_car_import_scale(scale: Vec3) -> bool {
+    (scale.x - SPORTS_CAR_ASSET_SCALE).abs() <= 0.002
+        && (scale.y - SPORTS_CAR_ASSET_SCALE).abs() <= 0.002
+        && (scale.z - SPORTS_CAR_ASSET_SCALE).abs() <= 0.002
 }
 
 fn chase_camera(
@@ -463,24 +753,24 @@ fn chase_camera(
 ) {
     let (car_transform, car_state) = *car;
     let speed = car_state.velocity.length();
-    let forward = forward_3d(car_state.yaw);
+    let forward = car_transform.rotation * Vec3::Z;
+    let up = car_transform.rotation * Vec3::Y;
     let tracking_direction = camera_tracking_direction(forward, car_state.velocity);
-    let target = car_transform.translation + Vec3::Y * 1.0;
-    let desired_position = target - tracking_direction * (7.5 + speed * 0.06) + Vec3::Y * 4.2;
+    let target = car_transform.translation + up * 1.0;
+    let desired_position = target - tracking_direction * (7.5 + speed * 0.06) + up * 4.2;
     let smoothing = 1.0 - (-8.0 * time.delta_secs()).exp();
 
     camera.translation = camera.translation.lerp(desired_position, smoothing);
-    camera.look_at(target + tracking_direction * 4.0, Vec3::Y);
+    camera.look_at(target + tracking_direction * 4.0, up);
 }
 
 fn camera_tracking_direction(forward: Vec3, velocity: Vec3) -> Vec3 {
-    let horizontal_velocity = Vec3::new(velocity.x, 0.0, velocity.z);
-    let speed = horizontal_velocity.length();
+    let speed = velocity.length();
     if speed <= 0.5 {
         return forward;
     }
 
-    let velocity_direction = horizontal_velocity / speed;
+    let velocity_direction = velocity / speed;
     let blend = (speed / CAMERA_VELOCITY_BLEND_SPEED).clamp(0.0, CAMERA_MAX_VELOCITY_BLEND);
     let blended = forward.lerp(velocity_direction, blend);
     if blended.length_squared() > f32::EPSILON {
@@ -514,6 +804,15 @@ mod tests {
     }
 
     #[test]
+    fn imported_front_wheels_exaggerate_steer_visually() {
+        let visual_steer = asset_wheel_steer(0.2, AssetWheelRole::FrontLeft);
+        let clamped_steer = asset_wheel_steer(2.0, AssetWheelRole::FrontLeft);
+
+        assert!(visual_steer.abs() > 0.2);
+        assert_eq!(clamped_steer, SPORTS_CAR_MAX_VISUAL_STEER);
+    }
+
+    #[test]
     fn imported_wheel_rotation_points_with_steer_direction() {
         let right_steer = asset_wheel_steer(0.42, AssetWheelRole::FrontLeft);
         let left_steer = asset_wheel_steer(-0.42, AssetWheelRole::FrontRight);
@@ -535,6 +834,35 @@ mod tests {
         assert_eq!(asset_wheel_spin(&car, AssetWheelRole::FrontLeft), 2.0);
         assert_eq!(asset_wheel_spin(&car, AssetWheelRole::FrontRight), 4.0);
         assert_eq!(asset_wheel_spin(&car, AssetWheelRole::Rear), 7.0);
+    }
+
+    #[test]
+    fn sports_car_front_wheels_are_pushed_outward() {
+        assert!(asset_wheel_translation_offset(AssetWheelRole::FrontLeft).x > 0.0);
+        assert!(asset_wheel_translation_offset(AssetWheelRole::FrontRight).x < 0.0);
+        assert_eq!(
+            asset_wheel_translation_offset(AssetWheelRole::Rear),
+            Vec3::ZERO
+        );
+    }
+
+    #[test]
+    fn sports_car_rear_wheel_mesh_is_widened_without_rescaling_body() {
+        assert_eq!(asset_wheel_role_scale(AssetWheelRole::FrontLeft), Vec3::ONE);
+        assert!(asset_wheel_role_scale(AssetWheelRole::Rear).x > 1.0);
+        assert_eq!(asset_wheel_role_scale(AssetWheelRole::Rear).y, 1.0);
+    }
+
+    #[test]
+    fn wheel_load_scale_squashes_loaded_tires_lightly() {
+        let mut car = PlayerCar::default();
+        car.wheel_suspension[model::FRONT_LEFT_WHEEL].compression = 0.8;
+        car.wheel_telemetry[model::FRONT_LEFT_WHEEL].slip_ratio = 0.5;
+
+        let scale = asset_wheel_load_scale(&car, AssetWheelRole::FrontLeft);
+
+        assert!(scale.y < 1.0);
+        assert!(scale.z > 1.0);
     }
 
     #[test]
@@ -560,20 +888,29 @@ mod tests {
     }
 
     #[test]
-    fn imported_vehicle_wheel_names_bind_to_visual_roles() {
+    fn sports_car_wheel_meshes_bind_from_imported_local_transform() {
+        let front_left = Transform::from_translation(Vec3::new(0.719, 0.250, 1.188))
+            .with_scale(Vec3::splat(SPORTS_CAR_ASSET_SCALE));
+        let front_right = Transform::from_translation(Vec3::new(-0.714, 0.250, 1.188))
+            .with_scale(Vec3::splat(SPORTS_CAR_ASSET_SCALE));
+        let rear = Transform::from_translation(Vec3::new(0.003, 0.250, -1.255))
+            .with_scale(Vec3::splat(SPORTS_CAR_ASSET_SCALE));
+        let body =
+            Transform::from_translation(Vec3::ZERO).with_scale(Vec3::splat(SPORTS_CAR_ASSET_SCALE));
+
         assert_eq!(
-            imported_wheel_role("SportsCar_FrontLeftWheel_Cylinder.013"),
+            sports_car_wheel_role_from_transform(&front_left),
             Some(AssetWheelRole::FrontLeft)
         );
         assert_eq!(
-            imported_wheel_role("SportsCar2_FrontRightWheel_Cylinder.018"),
+            sports_car_wheel_role_from_transform(&front_right),
             Some(AssetWheelRole::FrontRight)
         );
         assert_eq!(
-            imported_wheel_role("SportsCar_BackWheels_Cylinder.004"),
+            sports_car_wheel_role_from_transform(&rear),
             Some(AssetWheelRole::Rear)
         );
-        assert_eq!(imported_wheel_role("SportsCar_Cube.005"), None);
+        assert_eq!(sports_car_wheel_role_from_transform(&body), None);
     }
 
     #[test]

@@ -2,10 +2,8 @@ use bevy::prelude::*;
 
 use super::SessionSetup;
 use super::ui::{self, ButtonSpec};
-use crate::car_asset::{VehicleKind, VehicleSelection};
 use crate::game_state::GameState;
 use crate::hotseat::HotseatSession;
-use crate::run::RunState;
 use crate::track::TrackRecipe;
 
 type SetupButtons<'w, 's> = Query<
@@ -26,8 +24,6 @@ pub(super) enum SetupAction {
     SeedUp,
     LengthDown,
     LengthUp,
-    VehicleDown,
-    VehicleUp,
     StartRace,
     Back,
 }
@@ -37,7 +33,6 @@ pub(super) enum SetupValue {
     Players,
     Seed,
     Length,
-    Vehicle,
 }
 
 pub(super) fn spawn(mut commands: Commands) {
@@ -88,14 +83,6 @@ pub(super) fn spawn(mut commands: Commands) {
                 SetupAction::LengthDown,
                 SetupAction::LengthUp,
             );
-            row(
-                parent,
-                "Vehicle",
-                SetupValue::Vehicle,
-                SetupAction::VehicleDown,
-                SetupAction::VehicleUp,
-            );
-
             button(parent, "Start Race", SetupAction::StartRace);
             button(parent, "Back", SetupAction::Back);
         });
@@ -105,8 +92,6 @@ pub(super) fn handle(
     mut setup: ResMut<SessionSetup>,
     mut recipe: ResMut<TrackRecipe>,
     mut hotseat: ResMut<HotseatSession>,
-    mut vehicle_selection: ResMut<VehicleSelection>,
-    mut run: ResMut<RunState>,
     mut next_state: ResMut<NextState<GameState>>,
     buttons: SetupButtons,
 ) {
@@ -126,18 +111,10 @@ pub(super) fn handle(
                 setup.piece_count = setup.piece_count.saturating_sub(1).max(4)
             }
             SetupAction::LengthUp => setup.piece_count = (setup.piece_count + 1).min(64),
-            SetupAction::VehicleDown => {
-                setup.vehicle_index = setup.vehicle_index.saturating_sub(1);
-            }
-            SetupAction::VehicleUp => {
-                setup.vehicle_index = (setup.vehicle_index + 1).min(VehicleKind::count() - 1);
-            }
             SetupAction::StartRace => {
                 recipe.seed = setup.seed;
                 recipe.piece_count = setup.piece_count;
                 hotseat.configure_player_count(setup.player_count);
-                vehicle_selection.vehicle = VehicleKind::from_index(setup.vehicle_index);
-                run.reset();
                 next_state.set(GameState::Driving);
             }
             SetupAction::Back => next_state.set(GameState::MainMenu),
@@ -151,9 +128,6 @@ pub(super) fn update_values(setup: Res<SessionSetup>, mut values: Query<(&mut Te
             SetupValue::Players => setup.player_count.to_string(),
             SetupValue::Seed => setup.seed.to_string(),
             SetupValue::Length => setup.piece_count.to_string(),
-            SetupValue::Vehicle => VehicleKind::from_index(setup.vehicle_index)
-                .name()
-                .to_string(),
         };
     }
 }

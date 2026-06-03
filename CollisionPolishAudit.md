@@ -28,6 +28,7 @@ Implemented source of truth:
 
 * `src/physics/queries.rs` owns collision resolution through `TrackPhysicsQueries::resolve_car_pose`.
 * `src/driving.rs` requests a desired pose and accepts only the resolver output.
+* `CarPose` carries yaw plus support up, so rail shape casts and overlap checks use the same banked orientation as the visible vehicle.
 * `src/physics/components.rs` uses a centered rounded vehicle collider instead of the old rear-biased sharp cuboid.
 * `src/physics/layers.rs` exposes `rail_query_filter_excluding` so the car does not collide with itself during `MoveAndSlide`.
 * `src/debug.rs` shows collision telemetry: requested/accepted move, requested/accepted yaw, hit count, hit normal, yaw limiting, and depenetration length.

@@ -19,6 +19,7 @@ pub struct PhysicsQueriesPlugin;
 
 impl Plugin for PhysicsQueriesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(PhysicsPlugins::default());
+        app.add_plugins(PhysicsPlugins::default())
+            .insert_resource(avian3d::prelude::SubstepCount(12));
     }
 }

@@ -35,10 +35,6 @@ impl OrientedRect {
         Self { pose, half_extents }
     }
 
-    pub fn contains_xz(self, position: Vec3) -> bool {
-        self.contains(xz_position(position))
-    }
-
     pub fn contains(self, position: Vec2) -> bool {
         let local = self.pose.world_to_local(position);
 
@@ -71,15 +67,31 @@ pub fn xz_translation(position: Vec2, y: f32) -> Vec3 {
     Vec3::new(position.x, y, position.y)
 }
 
-pub fn xz_position(position: Vec3) -> Vec2 {
-    Vec2::new(position.x, position.z)
-}
+pub fn rotation_from_yaw_and_up(yaw: f32, up: Vec3) -> Quat {
+    let up = up.normalize_or(Vec3::Y);
+    let flat_forward = forward_3d(yaw);
+    let forward = (flat_forward - up * flat_forward.dot(up)).normalize_or(flat_forward);
+    let right = up.cross(forward).normalize_or(right_3d(yaw));
+    let forward = right.cross(up).normalize_or(forward);
 
-pub fn yaw_rotation(yaw: f32) -> Quat {
-    Quat::from_rotation_y(yaw)
+    Quat::from_mat3(&Mat3::from_cols(right, up, forward))
 }
 
 pub fn rotate_2d(value: Vec2, angle: f32) -> Vec2 {
     let (sin, cos) = angle.sin_cos();
     Vec2::new(value.x * cos - value.y * sin, value.x * sin + value.y * cos)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn yaw_up_rotation_aligns_local_up_to_surface_normal() {
+        let normal = Vec3::new(-0.29, 0.68, 0.68).normalize();
+        let rotation = rotation_from_yaw_and_up(1.2, normal);
+
+        assert!((rotation * Vec3::Y).distance(normal) < 0.001);
+        assert!((rotation * Vec3::Z).dot(normal).abs() < 0.001);
+    }
 }

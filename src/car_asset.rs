@@ -8,49 +8,11 @@ impl Plugin for CarAssetPlugin {
     }
 }
 
-#[derive(Clone, Copy, Resource)]
-pub struct VehicleSelection {
-    pub vehicle: VehicleKind,
-}
+#[derive(Clone, Copy, Resource, Default)]
+pub struct VehicleSelection;
 
-impl Default for VehicleSelection {
-    fn default() -> Self {
-        Self {
-            vehicle: VehicleKind::SportsCar,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VehicleKind {
-    SportsCar,
-    SportsCar2,
-}
-
-impl VehicleKind {
-    pub const fn from_index(index: usize) -> Self {
-        match index {
-            0 => Self::SportsCar,
-            1 => Self::SportsCar2,
-            _ => panic!("vehicle index out of range"),
-        }
-    }
-
-    pub const fn count() -> usize {
-        2
-    }
-
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::SportsCar => "SportsCar",
-            Self::SportsCar2 => "SportsCar2",
-        }
-    }
-
+impl VehicleSelection {
     pub const fn fbx_scene_path(self) -> &'static str {
-        match self {
-            Self::SportsCar => "cars/fbx/SportsCar.fbx#Scene0",
-            Self::SportsCar2 => "cars/fbx/SportsCar2.fbx#Scene0",
-        }
+        "cars/fbx/SportsCar.fbx#Scene0"
     }
 }

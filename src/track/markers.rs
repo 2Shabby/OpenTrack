@@ -4,12 +4,6 @@ use bevy::prelude::*;
 pub struct SpawnedSceneEntity;
 
 #[derive(Component)]
-pub struct GeneratedEnvironment;
-
-#[derive(Component)]
-pub struct GeneratedScenery;
-
-#[derive(Component)]
 pub struct GeneratedRoadSurface;
 
 #[derive(Component)]

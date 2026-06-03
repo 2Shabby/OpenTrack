@@ -5,10 +5,10 @@ use std::collections::HashSet;
 
 use super::path::generated_frames;
 use super::types::{
-    PIECE_LENGTH, TrackPiece, TrackPieceKind, TrackRecipe, TurnAngle, TurnDirection,
+    BankAngle, BankTransitionMode, PIECE_LENGTH, TrackConnector, TrackPiece, TrackPieceKind,
+    TrackRecipe, TurnAngle, TurnDirection,
 };
 use super::validation::{candidate_is_valid, occupied_cells_for_fit};
-use crate::geometry::Pose2;
 use crate::surface::SurfaceKind;
 
 const MAX_PLAN_ATTEMPTS: usize = 256;
@@ -35,8 +35,9 @@ fn plan_track(
     checkpoint_index: usize,
     rng: &mut ChaCha8Rng,
 ) -> Option<Vec<TrackPiece>> {
-    let start = Pose2::new(
+    let start = TrackConnector::new(
         Vec2::new(0.0, -((piece_count as f32) * PIECE_LENGTH * 0.5)),
+        0.0,
         0.0,
     );
     let mut stack = Vec::with_capacity(piece_count);
@@ -78,7 +79,7 @@ fn plan_track(
 
 struct PlanStep {
     index: usize,
-    entry: Pose2,
+    entry: TrackConnector,
     candidates: Vec<TrackPieceKind>,
     next_candidate: usize,
     piece: Option<TrackPiece>,
@@ -87,7 +88,7 @@ struct PlanStep {
 impl PlanStep {
     fn new(
         index: usize,
-        entry: Pose2,
+        entry: TrackConnector,
         piece_count: usize,
         checkpoint_index: usize,
         rng: &mut ChaCha8Rng,
@@ -128,7 +129,7 @@ impl PlanStep {
 }
 
 fn piece_kind_candidates(
-    entry: Pose2,
+    entry: TrackConnector,
     index: usize,
     piece_count: usize,
     checkpoint_index: usize,
@@ -136,6 +137,10 @@ fn piece_kind_candidates(
 ) -> Vec<TrackPieceKind> {
     if let Some(required) = required_piece_kind(index, piece_count, checkpoint_index) {
         return vec![required];
+    }
+
+    if let Some(bank_direction) = bank_direction(entry.bank) {
+        return banked_piece_candidates(bank_direction, entry.bank, rng);
     }
 
     let primary = turn_direction(entry.yaw, rng);
@@ -173,10 +178,56 @@ fn piece_kind_candidates(
     let rotation = rng.random_range(0..turns.len());
     turns.rotate_left(rotation);
 
-    let mut candidates = Vec::with_capacity(turns.len() + 2);
+    let mut candidates = Vec::with_capacity(turns.len() + 6);
     candidates.push(TrackPieceKind::Straight);
     candidates.push(TrackPieceKind::DoubleStraight);
     candidates.extend(turns);
+    candidates.push(TrackPieceKind::BankTransition {
+        direction: primary,
+        angle: generated_bank_angle(rng),
+        mode: BankTransitionMode::In,
+    });
+    candidates.push(TrackPieceKind::BankTransition {
+        direction: secondary,
+        angle: generated_bank_angle(rng),
+        mode: BankTransitionMode::In,
+    });
+    let rotation = rng.random_range(0..candidates.len());
+    candidates.rotate_left(rotation);
+    candidates
+}
+
+fn banked_piece_candidates(
+    direction: TurnDirection,
+    signed_bank: f32,
+    rng: &mut ChaCha8Rng,
+) -> Vec<TrackPieceKind> {
+    let angle =
+        if signed_bank.abs() > (BankAngle::Deg30.radians() + BankAngle::Deg45.radians()) * 0.5 {
+            BankAngle::Deg45
+        } else {
+            BankAngle::Deg30
+        };
+
+    let mut candidates = vec![
+        TrackPieceKind::BankedStraight { direction, angle },
+        TrackPieceKind::BankedDoubleStraight { direction, angle },
+        TrackPieceKind::BankedTurn {
+            direction,
+            turn_angle: TurnAngle::Deg45,
+            bank_angle: angle,
+        },
+        TrackPieceKind::BankedTurn {
+            direction,
+            turn_angle: TurnAngle::Deg90,
+            bank_angle: angle,
+        },
+        TrackPieceKind::BankTransition {
+            direction,
+            angle,
+            mode: BankTransitionMode::Out,
+        },
+    ];
     let rotation = rng.random_range(0..candidates.len());
     candidates.rotate_left(rotation);
     candidates
@@ -208,6 +259,24 @@ fn turn_direction(route_yaw: f32, rng: &mut ChaCha8Rng) -> TurnDirection {
         TurnDirection::Right
     } else {
         TurnDirection::Left
+    }
+}
+
+fn bank_direction(bank: f32) -> Option<TurnDirection> {
+    if bank > 0.001 {
+        Some(TurnDirection::Right)
+    } else if bank < -0.001 {
+        Some(TurnDirection::Left)
+    } else {
+        None
+    }
+}
+
+fn generated_bank_angle(rng: &mut ChaCha8Rng) -> BankAngle {
+    if rng.random_bool(0.35) {
+        BankAngle::Deg45
+    } else {
+        BankAngle::Deg30
     }
 }
 

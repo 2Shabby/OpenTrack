@@ -4,7 +4,6 @@ use super::QuitRequested;
 use super::ui::{self, ButtonSpec};
 use crate::driving::{CarSpawn, PlayerCar};
 use crate::game_state::{GameState, PauseState};
-use crate::run::RunState;
 
 type PauseButtons<'w, 's> = Query<
     'w,
@@ -56,7 +55,6 @@ pub(super) fn sync_menu(
 
 pub(super) fn handle_menu(
     mut pause: ResMut<PauseState>,
-    mut run: ResMut<RunState>,
     mut next_state: ResMut<NextState<GameState>>,
     mut quit: ResMut<QuitRequested>,
     car_spawn: Res<CarSpawn>,
@@ -75,17 +73,14 @@ pub(super) fn handle_menu(
         match action {
             PauseMenuAction::Resume => pause.paused = false,
             PauseMenuAction::Restart => {
-                run.reset();
                 reset_player_car(&mut cars, *car_spawn);
                 pause.paused = false;
             }
             PauseMenuAction::Setup => {
-                run.reset();
                 pause.paused = false;
                 next_state.set(GameState::Setup);
             }
             PauseMenuAction::MainMenu => {
-                run.reset();
                 pause.paused = false;
                 next_state.set(GameState::MainMenu);
             }

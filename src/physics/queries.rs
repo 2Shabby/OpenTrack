@@ -8,7 +8,7 @@ use bevy::prelude::*;
 
 use super::components::{RoadCollider, vehicle_collider};
 use super::layers::{rail_query_filter_excluding, road_query_filter};
-use crate::geometry::yaw_rotation;
+use crate::geometry::rotation_from_yaw_and_up;
 use crate::surface::SurfaceKind;
 
 const GROUND_RAY_START_HEIGHT: f32 = 3.0;
@@ -62,6 +62,13 @@ impl CollisionState {
 pub struct CarPose {
     pub translation: Vec3,
     pub yaw: f32,
+    pub up: Vec3,
+}
+
+impl CarPose {
+    fn rotation(self) -> Quat {
+        rotation_from_yaw_and_up(self.yaw, self.up)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -104,6 +111,8 @@ pub struct GroundContact {
     pub source: GroundSource,
     pub surface: SurfaceKind,
     pub boost_direction: Option<Vec3>,
+    pub point: Vec3,
+    pub normal: Vec3,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -151,7 +160,7 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
             false,
             &filter,
         ) else {
-            return off_track_contact();
+            return road_miss_contact(position);
         };
 
         self.roads
@@ -161,8 +170,10 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
                 source: GroundSource::Road,
                 surface: road.surface,
                 boost_direction: road.boost_direction,
+                point: origin + Vec3::NEG_Y * hit.distance,
+                normal: hit.normal.adjust_precision().normalize_or(Vec3::Y),
             })
-            .unwrap_or_else(off_track_contact)
+            .unwrap_or_else(|| road_miss_contact(position))
     }
 
     fn resolve_car_pose(
@@ -195,15 +206,23 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
         for _ in 0..slice_count {
             let slice_start = pose;
             let candidate_yaw = pose.yaw + yaw_step;
-            let was_intersecting =
-                self.car_intersects_rail(slice_start.translation, candidate_yaw, car_entity);
+            let candidate_up = pose
+                .up
+                .lerp(requested.up, 1.0 / slice_count as f32)
+                .normalize_or(pose.up);
+            let was_intersecting = self.car_intersects_rail(
+                slice_start.translation,
+                candidate_yaw,
+                candidate_up,
+                car_entity,
+            );
             started_intersecting |= was_intersecting;
 
             let mut slice_hit_count = 0u8;
             let output = self.move_and_slide.move_and_slide(
                 &shape,
                 slice_start.translation,
-                yaw_rotation(candidate_yaw),
+                rotation_from_yaw_and_up(candidate_yaw, candidate_up),
                 resolved_velocity,
                 slice_duration,
                 &config,
@@ -225,30 +244,48 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
                 was_intersecting,
             );
 
-            if self.car_intersects_rail(accepted_translation, accepted_yaw, car_entity) {
+            if self.car_intersects_rail(
+                accepted_translation,
+                accepted_yaw,
+                candidate_up,
+                car_entity,
+            ) {
                 debug.yaw_limited = true;
                 accepted_yaw = self.largest_clear_yaw(
                     accepted_translation,
                     slice_start.yaw,
                     candidate_yaw,
+                    candidate_up,
                     car_entity,
                 );
 
-                if self.car_intersects_rail(accepted_translation, accepted_yaw, car_entity) {
+                if self.car_intersects_rail(
+                    accepted_translation,
+                    accepted_yaw,
+                    candidate_up,
+                    car_entity,
+                ) {
                     accepted_translation = self.largest_clear_translation(
                         slice_start.translation,
                         accepted_translation,
                         accepted_yaw,
+                        candidate_up,
                         car_entity,
                     );
                 }
 
-                if self.car_intersects_rail(accepted_translation, accepted_yaw, car_entity) {
+                if self.car_intersects_rail(
+                    accepted_translation,
+                    accepted_yaw,
+                    candidate_up,
+                    car_entity,
+                ) {
                     accepted_yaw = slice_start.yaw;
                     accepted_translation = self.largest_clear_translation(
                         slice_start.translation,
                         accepted_translation,
                         accepted_yaw,
+                        candidate_up,
                         car_entity,
                     );
                     resolved_velocity =
@@ -256,6 +293,7 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
                     pose = CarPose {
                         translation: accepted_translation,
                         yaw: accepted_yaw,
+                        up: candidate_up,
                     };
                     debug.depenetration += pose.translation - slice_start.translation;
                 }
@@ -264,6 +302,7 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
             pose = CarPose {
                 translation: accepted_translation,
                 yaw: accepted_yaw,
+                up: candidate_up,
             };
 
             if was_intersecting {
@@ -285,9 +324,14 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
 }
 
 impl AvianTrackPhysicsQueries<'_, '_, '_> {
-    fn car_intersects_rail(&self, position: Vec3, yaw: f32, car_entity: Entity) -> bool {
+    fn car_intersects_rail(&self, position: Vec3, yaw: f32, up: Vec3, car_entity: Entity) -> bool {
         let shape = vehicle_collider();
-        let rotation = yaw_rotation(yaw);
+        let rotation = CarPose {
+            translation: position,
+            yaw,
+            up,
+        }
+        .rotation();
         let filter = rail_query_filter_excluding(car_entity);
 
         !self
@@ -302,12 +346,13 @@ impl AvianTrackPhysicsQueries<'_, '_, '_> {
         position: Vec3,
         clear_yaw: f32,
         blocked_yaw: f32,
+        up: Vec3,
         car_entity: Entity,
     ) -> f32 {
-        if !self.car_intersects_rail(position, blocked_yaw, car_entity) {
+        if !self.car_intersects_rail(position, blocked_yaw, up, car_entity) {
             return blocked_yaw;
         }
-        if self.car_intersects_rail(position, clear_yaw, car_entity) {
+        if self.car_intersects_rail(position, clear_yaw, up, car_entity) {
             return clear_yaw;
         }
 
@@ -315,7 +360,7 @@ impl AvianTrackPhysicsQueries<'_, '_, '_> {
         let mut blocked = blocked_yaw;
         for _ in 0..YAW_LIMIT_ITERATIONS {
             let midpoint = clear + (blocked - clear) * 0.5;
-            if self.car_intersects_rail(position, midpoint, car_entity) {
+            if self.car_intersects_rail(position, midpoint, up, car_entity) {
                 blocked = midpoint;
             } else {
                 clear = midpoint;
@@ -329,12 +374,13 @@ impl AvianTrackPhysicsQueries<'_, '_, '_> {
         clear_position: Vec3,
         blocked_position: Vec3,
         yaw: f32,
+        up: Vec3,
         car_entity: Entity,
     ) -> Vec3 {
-        if !self.car_intersects_rail(blocked_position, yaw, car_entity) {
+        if !self.car_intersects_rail(blocked_position, yaw, up, car_entity) {
             return blocked_position;
         }
-        if self.car_intersects_rail(clear_position, yaw, car_entity) {
+        if self.car_intersects_rail(clear_position, yaw, up, car_entity) {
             return clear_position;
         }
 
@@ -342,7 +388,7 @@ impl AvianTrackPhysicsQueries<'_, '_, '_> {
         let mut blocked = blocked_position;
         for _ in 0..TRANSLATION_LIMIT_ITERATIONS {
             let midpoint = clear.lerp(blocked, 0.5);
-            if self.car_intersects_rail(midpoint, yaw, car_entity) {
+            if self.car_intersects_rail(midpoint, yaw, up, car_entity) {
                 blocked = midpoint;
             } else {
                 clear = midpoint;
@@ -352,11 +398,13 @@ impl AvianTrackPhysicsQueries<'_, '_, '_> {
     }
 }
 
-fn off_track_contact() -> GroundContact {
+fn road_miss_contact(position: Vec3) -> GroundContact {
     GroundContact {
         source: GroundSource::OffTrack,
-        surface: SurfaceKind::Grass,
+        surface: SurfaceKind::Asphalt,
         boost_direction: None,
+        point: position,
+        normal: Vec3::Y,
     }
 }
 

@@ -1,8 +1,12 @@
-use super::types::{GeneratedTrackInfo, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece, TrackPieceKind};
+use super::types::{
+    BankTransitionMode, GeneratedTrackInfo, MAX_BANK_ANGLE, RAIL_THICKNESS, TRACK_WIDTH,
+    TrackConnector, TrackPiece, TrackPieceKind,
+};
 use std::collections::HashSet;
 
 const MAX_ROUTE_YAW: f32 = std::f32::consts::PI * 0.85;
 const OCCUPANCY_CELL_SIZE: f32 = 6.0;
+const MAX_BANK_DELTA_PER_METER: f32 = 0.07;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct OccupancyCell {
@@ -127,7 +131,11 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
         let expected_pose = match piece.kind {
             TrackPieceKind::Straight
             | TrackPieceKind::DoubleStraight
+            | TrackPieceKind::BankTransition { .. }
+            | TrackPieceKind::BankedStraight { .. }
+            | TrackPieceKind::BankedDoubleStraight { .. }
             | TrackPieceKind::Turn { .. } => piece.entry(),
+            TrackPieceKind::BankedTurn { .. } => piece.entry(),
             TrackPieceKind::Checkpoint(_) => piece.entry(),
             TrackPieceKind::Finish => piece.exit(),
         };
@@ -137,11 +145,12 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
             .position
             .distance(expected_pose.position);
         let yaw_delta = (trigger.bounds.pose.yaw - expected_pose.yaw).abs();
+        let bank_delta = (trigger.frame.bank - expected_pose.bank).abs();
 
-        if offset > 0.001 || yaw_delta > 0.001 {
+        if offset > 0.001 || yaw_delta > 0.001 || bank_delta > 0.001 {
             return Err(format!(
-                "piece {index} trigger is misaligned by {:.4} and yaw {:.4}",
-                offset, yaw_delta
+                "piece {index} trigger is misaligned by {:.4}, yaw {:.4}, and bank {:.4}",
+                offset, yaw_delta, bank_delta
             ));
         }
     }
@@ -149,6 +158,8 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
     match piece.kind {
         TrackPieceKind::Straight
         | TrackPieceKind::DoubleStraight
+        | TrackPieceKind::BankedStraight { .. }
+        | TrackPieceKind::BankedDoubleStraight { .. }
         | TrackPieceKind::Checkpoint(_)
         | TrackPieceKind::Finish => {
             if piece.frames.len() != 2 {
@@ -158,7 +169,16 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
                 ));
             }
         }
-        TrackPieceKind::Turn { .. } => {
+        TrackPieceKind::BankTransition { .. } => {
+            if piece.frames.len() < 4 {
+                return Err(format!(
+                    "piece {index} has {} frames for a bank transition, expected at least 4",
+                    piece.frames.len()
+                ));
+            }
+            validate_straight_frames(piece, index)?;
+        }
+        TrackPieceKind::Turn { .. } | TrackPieceKind::BankedTurn { .. } => {
             if piece.frames.len() < 3 {
                 return Err(format!(
                     "piece {index} has {} curve frames, expected at least 3",
@@ -168,16 +188,59 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
             validate_curve_frames(piece, index)?;
         }
     }
+    validate_bank_frames(piece, index)?;
+    validate_bank_profile(piece, index)?;
+
+    Ok(())
+}
+
+fn validate_straight_frames(piece: &TrackPiece, index: usize) -> Result<(), String> {
+    let first_segment = piece.frames[0].position.distance(piece.frames[1].position);
+    let expected_yaw = piece.entry().yaw;
+    let expected_forward = piece.entry().forward();
+
+    for (frame_index, pair) in piece.frames.windows(2).enumerate() {
+        for frame in pair {
+            let yaw_delta = (frame.yaw - expected_yaw).abs();
+            if yaw_delta > 0.001 {
+                return Err(format!(
+                    "piece {index} straight frame {frame_index} changes yaw by {:.4}",
+                    yaw_delta
+                ));
+            }
+        }
+
+        let segment = pair[1].position - pair[0].position;
+        let segment_length = segment.length();
+        if segment_length <= 0.001 {
+            return Err(format!(
+                "piece {index} straight segment {frame_index} has nonpositive length {:.4}",
+                segment_length
+            ));
+        }
+
+        let length_ratio = segment_length / first_segment.max(0.001);
+        if !(0.75..=1.25).contains(&length_ratio) {
+            return Err(format!(
+                "piece {index} straight segment {frame_index} length ratio {:.3} is outside coherent range",
+                length_ratio
+            ));
+        }
+
+        let direction = segment / segment_length;
+        if direction.dot(expected_forward) < 0.999 {
+            return Err(format!(
+                "piece {index} straight segment {frame_index} does not follow entry forward"
+            ));
+        }
+    }
 
     Ok(())
 }
 
 fn validate_curve_frames(piece: &TrackPiece, index: usize) -> Result<(), String> {
-    let first_segment = piece.frames[0]
-        .pose
-        .position
-        .distance(piece.frames[1].pose.position);
-    let mut previous_yaw = piece.frames[0].pose.yaw;
+    let first_segment = piece.frames[0].position.distance(piece.frames[1].position);
+    let mut previous_yaw = piece.frames[0].yaw;
     let yaw_direction = (piece.exit().yaw - piece.entry().yaw).signum();
 
     if yaw_direction == 0.0 {
@@ -185,7 +248,7 @@ fn validate_curve_frames(piece: &TrackPiece, index: usize) -> Result<(), String>
     }
 
     for (frame_index, pair) in piece.frames.windows(2).enumerate() {
-        let segment_length = pair[0].pose.position.distance(pair[1].pose.position);
+        let segment_length = pair[0].position.distance(pair[1].position);
         if segment_length <= 0.001 {
             return Err(format!(
                 "piece {index} curve segment {frame_index} has nonpositive length {:.4}",
@@ -201,14 +264,86 @@ fn validate_curve_frames(piece: &TrackPiece, index: usize) -> Result<(), String>
             ));
         }
 
-        let yaw_delta = pair[1].pose.yaw - previous_yaw;
+        let yaw_delta = pair[1].yaw - previous_yaw;
         if yaw_delta.signum() != yaw_direction {
             return Err(format!(
                 "piece {index} curve frame {} reverses yaw progression",
                 frame_index + 1
             ));
         }
-        previous_yaw = pair[1].pose.yaw;
+        previous_yaw = pair[1].yaw;
+    }
+
+    Ok(())
+}
+
+fn validate_bank_frames(piece: &TrackPiece, index: usize) -> Result<(), String> {
+    for (frame_index, frame) in piece.frames.iter().enumerate() {
+        if frame.bank.abs() > MAX_BANK_ANGLE + 0.001 {
+            return Err(format!(
+                "piece {index} frame {frame_index} has bank {:.3}, max {:.3}",
+                frame.bank, MAX_BANK_ANGLE
+            ));
+        }
+    }
+
+    for (frame_index, pair) in piece.frames.windows(2).enumerate() {
+        let distance = pair[0].center.distance(pair[1].center).max(0.001);
+        let bank_rate = (pair[1].bank - pair[0].bank).abs() / distance;
+        if bank_rate > MAX_BANK_DELTA_PER_METER {
+            return Err(format!(
+                "piece {index} frame {frame_index} changes bank too quickly: {:.3}",
+                bank_rate
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_bank_profile(piece: &TrackPiece, index: usize) -> Result<(), String> {
+    let entry_bank = piece.entry().bank;
+    let exit_bank = piece.exit().bank;
+
+    match piece.kind {
+        TrackPieceKind::BankTransition { mode, .. } => match mode {
+            BankTransitionMode::In => {
+                if entry_bank.abs() > 0.001 || exit_bank.abs() <= 0.001 {
+                    return Err(format!("piece {index} has invalid bank-in profile"));
+                }
+            }
+            BankTransitionMode::Out => {
+                if entry_bank.abs() <= 0.001 || exit_bank.abs() > 0.001 {
+                    return Err(format!("piece {index} has invalid bank-out profile"));
+                }
+            }
+        },
+        TrackPieceKind::BankedStraight { direction, angle }
+        | TrackPieceKind::BankedDoubleStraight { direction, angle } => {
+            let expected = direction.side() * angle.radians();
+            if (entry_bank - expected).abs() > 0.001 || (exit_bank - expected).abs() > 0.001 {
+                return Err(format!("piece {index} has mismatched held bank"));
+            }
+        }
+        TrackPieceKind::BankedTurn {
+            direction,
+            bank_angle,
+            ..
+        } => {
+            let expected = direction.side() * bank_angle.radians();
+            if (entry_bank - expected).abs() > 0.001 || (exit_bank - expected).abs() > 0.001 {
+                return Err(format!("piece {index} has mismatched banked turn"));
+            }
+        }
+        TrackPieceKind::Straight
+        | TrackPieceKind::DoubleStraight
+        | TrackPieceKind::Turn { .. }
+        | TrackPieceKind::Checkpoint(_)
+        | TrackPieceKind::Finish => {
+            if (entry_bank - exit_bank).abs() > 0.001 {
+                return Err(format!("piece {index} changes bank without transition"));
+            }
+        }
     }
 
     Ok(())
@@ -221,14 +356,16 @@ fn validate_piece_connection(
 ) -> Result<(), String> {
     let gap = previous.exit().position.distance(next.entry().position);
     let yaw_delta = (previous.exit().yaw - next.entry().yaw).abs();
+    let bank_delta = (previous.exit().bank - next.entry().bank).abs();
 
-    if gap > 0.001 || yaw_delta > 0.001 {
+    if gap > 0.001 || yaw_delta > 0.001 || bank_delta > 0.001 {
         return Err(format!(
-            "piece {} -> {} has gap {:.4} and yaw delta {:.4}",
+            "piece {} -> {} has gap {:.4}, yaw delta {:.4}, and bank delta {:.4}",
             previous_index,
             previous_index + 1,
             gap,
-            yaw_delta
+            yaw_delta,
+            bank_delta
         ));
     }
 
@@ -325,7 +462,7 @@ impl OccupancyCell {
         cells
     }
 
-    fn from_entry_seam(entry: crate::geometry::Pose2) -> HashSet<Self> {
+    fn from_entry_seam(entry: TrackConnector) -> HashSet<Self> {
         let seam_half_width = TRACK_WIDTH * 0.5 + RAIL_THICKNESS;
         let seam_half_depth = OCCUPANCY_CELL_SIZE * 0.5;
         let forward = entry.forward();
@@ -363,7 +500,10 @@ mod tests {
 
     use super::super::assembly::generate_track_pieces;
     use super::super::path::TrackPath;
-    use super::super::types::{PIECE_LENGTH, TrackRecipe, TurnAngle, TurnDirection};
+    use super::super::types::{
+        BankAngle, BankTransitionMode, PIECE_LENGTH, TrackConnector, TrackRecipe, TurnAngle,
+        TurnDirection,
+    };
 
     #[test]
     fn generated_tracks_validate_across_seed_range() {
@@ -390,9 +530,10 @@ mod tests {
             let pieces = generate_track_pieces(&recipe);
 
             assert!(
-                pieces
-                    .iter()
-                    .any(|piece| matches!(piece.kind, TrackPieceKind::Turn { .. })),
+                pieces.iter().any(|piece| matches!(
+                    piece.kind,
+                    TrackPieceKind::Turn { .. } | TrackPieceKind::BankedTurn { .. }
+                )),
                 "seed {seed} generated no turn pieces"
             );
         }
@@ -419,6 +560,34 @@ mod tests {
     }
 
     #[test]
+    fn generated_tracks_include_banked_pieces_across_seed_range() {
+        let mut banked_piece_count = 0;
+
+        for seed in 0..128 {
+            let recipe = TrackRecipe {
+                seed,
+                piece_count: 32,
+            };
+            let pieces = generate_track_pieces(&recipe);
+
+            banked_piece_count += pieces
+                .iter()
+                .filter(|piece| {
+                    matches!(
+                        piece.kind,
+                        TrackPieceKind::BankTransition { .. }
+                            | TrackPieceKind::BankedStraight { .. }
+                            | TrackPieceKind::BankedDoubleStraight { .. }
+                            | TrackPieceKind::BankedTurn { .. }
+                    )
+                })
+                .count();
+        }
+
+        assert!(banked_piece_count > 0);
+    }
+
+    #[test]
     fn double_straight_uses_two_piece_lengths() {
         let frames = test_frames(
             Pose2::new(bevy::prelude::Vec2::ZERO, 0.0),
@@ -426,8 +595,50 @@ mod tests {
         );
 
         assert_eq!(frames.len(), 2);
-        let length = frames[0].pose.position.distance(frames[1].pose.position);
+        let length = frames[0].position.distance(frames[1].position);
         assert!((length - PIECE_LENGTH * 2.0).abs() <= 0.001);
+    }
+
+    #[test]
+    fn bank_transition_reaches_requested_bank_without_exceeding_limit() {
+        let frames = test_frames(
+            Pose2::new(bevy::prelude::Vec2::ZERO, 0.0),
+            TrackPieceKind::BankTransition {
+                direction: TurnDirection::Right,
+                angle: BankAngle::Deg45,
+                mode: BankTransitionMode::In,
+            },
+        );
+
+        assert_eq!(frames[0].bank, 0.0);
+        assert!(frames.len() > 2);
+        assert!((frames.last().unwrap().bank - BankAngle::Deg45.radians()).abs() <= 0.001);
+        assert!(
+            frames
+                .iter()
+                .all(|frame| frame.bank.abs() <= MAX_BANK_ANGLE)
+        );
+    }
+
+    #[test]
+    fn bank_transition_uses_dense_eased_samples() {
+        let frames = test_frames(
+            Pose2::new(bevy::prelude::Vec2::ZERO, 0.0),
+            TrackPieceKind::BankTransition {
+                direction: TurnDirection::Right,
+                angle: BankAngle::Deg45,
+                mode: BankTransitionMode::In,
+            },
+        );
+        let bank_deltas: Vec<_> = frames
+            .windows(2)
+            .map(|pair| (pair[1].bank - pair[0].bank).abs())
+            .collect();
+        let middle_delta = bank_deltas[bank_deltas.len() / 2];
+
+        assert!(frames.len() >= 9);
+        assert!(bank_deltas[0] < middle_delta);
+        assert!(*bank_deltas.last().unwrap() < middle_delta);
     }
 
     #[test]
@@ -500,7 +711,10 @@ mod tests {
         validate_track_pieces(&[first, second, checkpoint, finish]).unwrap();
     }
 
-    fn test_frames(entry: Pose2, kind: TrackPieceKind) -> Vec<super::super::types::PathFrame> {
-        TrackPath::for_piece(entry, kind).sample_frames()
+    fn test_frames(
+        entry: impl Into<TrackConnector>,
+        kind: TrackPieceKind,
+    ) -> Vec<super::super::types::PathFrame> {
+        TrackPath::for_piece(entry.into(), kind).sample_frames()
     }
 }

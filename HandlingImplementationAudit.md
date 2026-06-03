@@ -30,22 +30,26 @@ Normal driving is primary. Rear-brake drift is a secondary rotation tool, not th
 
 * `PlayerCar` stores rear-brake input and current physics-derived `DriftAssist`.
 * `PlayerCar` stores `yaw_rate` as actual vehicle state.
+* `PlayerCar` stores target and resolved front-wheel steer angles; tire yaw uses the resolved angle.
+* `PlayerCar` stores a wheel-derived support frame: support state, contact count, support normal, support axes, dominant surface, and boost direction.
 * `drive_car` derives drift assist before tire force calculation and feeds it into `tire_forces`.
 * `drive_car` advances yaw from `resolved_yaw_rate`, not raw steering input.
+* `drive_car` now uses the same support frame for force basis, car transform rotation, visual-root rotation, camera up, and rail collision pose. The transform no longer gets overwritten with yaw-only world-up rotation on banked road.
 * Collision resolution feeds back accepted yaw into `yaw_rate`, so rail contact cannot leave stale free rotation.
+* The single active SportsCar FBX is visual-only. Wheel mesh fragments bind by the current imported local transform pattern, the FBX repair script canonicalizes mesh names and verifies outward front hub orientation, and car-scene material normalization is scoped to descendants of `VehicleSceneRoot`.
 * Service brake does not trigger drift assist.
 
 `src/surface.rs`:
 
 * `SurfaceParams` includes `passive_slip_scale`, `recovery_scale`, `rear_brake_grip_loss_scale`, and `rear_brake_yaw_scale`.
 * Asphalt is the grippy baseline with faster recovery and conservative rear-brake scaling.
-* Dirt/grass loosen sooner and recover slower than asphalt, but less aggressively than the earlier drift-first pass.
+* Dirt loosens sooner and recovers slower than asphalt, but less aggressively than the earlier drift-first pass.
 * Ice has the earliest passive breakaway and weakest recovery.
 * Boost remains fast and close to asphalt rather than a drift surface.
 
 `src/debug.rs`:
 
-* The overlay shows rear-brake input, drift state, slide reason, rear-brake tire cost, yaw assist, wheel RPM/slip, suspension compression/offsets, boost direction, and collision telemetry.
+* The overlay shows rear-brake input, drift state, slide reason, target/actual steer and yaw, support state/count/normal, motor/load/slip feedback, wheel RPM/slip, suspension compression/offsets, boost direction, and collision telemetry.
 
 ## Resolved Contradictions
 
@@ -55,6 +59,10 @@ Normal driving is primary. Rear-brake drift is a secondary rotation tool, not th
 * The plan required surface-scaled slip/recovery, while surfaces only had friction and drag. Implemented.
 * The user rejected explicit drift windows. Tap/sustain/recovery timers are removed; assist is now derived from current physics/input state.
 * The car felt drift-first because direct steering yaw could rotate the body faster than tire cleanup. Steering now targets yaw rate through front wheel angle, speed, tire saturation, and yaw inertia/damping.
+* The car did not right itself to banked surfaces because physics used road normals while transform and collider pose stayed yaw-only/world-up. The car pose now uses yaw plus a wheel-derived support normal.
+* Checkpoint/finish strips and the start pose were not coherently bound to banked surfaces. They now use the relevant `PathFrame` center/normal/yaw instead of fixed world height plus yaw-only placement.
+* Bank transitions were too jerky because transition pieces were sampled as one large twisted quad, leaving the road collider with coarse triangle normals. `BankTransition` now uses dense smootherstep samples while ordinary held-bank straights remain endpoint-only.
+* Imported wheel visuals should not be corrected with runtime per-wheel flips. The Blender repair script now checks front hub center/normal geometry and mirrors only inward-facing front hubs in the FBX mesh data.
 
 No user-blocking decision is open for the next implementation pass.
 
@@ -103,8 +111,12 @@ Surface behavior:
 * yaw-rate response not snapping instantly to target yaw
 * steering moving lateral demand toward the front axle by share rather than by stale absolute-force assumptions
 * existing asphalt hard-steering grip behavior
+* target/resolved steering servo behavior and repaired SportsCar front hub orientation
+* SportsCar wheel binding from the supported imported mesh transform pattern
+* yaw-plus-support-normal rotation aligning local car up to banked road normals
+* dense eased bank-transition sampling and validation
 
-Current verification: `cargo test` passes with 63 tests.
+Current verification: `cargo test` passes with 76 tests.
 
 ## Remaining Work
 
