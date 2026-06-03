@@ -86,6 +86,7 @@ pub struct PlayerCar {
     pub drive_mode: DriveMode,
     pub handling_state: HandlingState,
     pub wheel_contacts: WheelContacts,
+    pub tire_forces: model::TireForces,
 }
 
 impl Default for PlayerCar {
@@ -104,6 +105,7 @@ impl Default for PlayerCar {
             drive_mode: DriveMode::Forward,
             handling_state: HandlingState::Grip,
             wheel_contacts: WheelContacts::default(),
+            tire_forces: model::TireForces::default(),
         }
     }
 }
@@ -183,12 +185,22 @@ impl WheelContacts {
             .join(" ")
     }
 
-    pub fn average_lateral_grip(self, surfaces: &SurfaceLibrary) -> f32 {
-        self.contacts
-            .iter()
-            .map(|contact| surfaces.get(contact.surface).lateral_grip)
-            .sum::<f32>()
-            / self.contacts.len() as f32
+    pub fn friction(self, surfaces: &SurfaceLibrary) -> model::SurfaceFriction {
+        let (longitudinal, lateral) =
+            self.contacts
+                .iter()
+                .fold((0.0, 0.0), |(longitudinal, lateral), contact| {
+                    let surface = surfaces.get(contact.surface);
+                    (
+                        longitudinal + surface.longitudinal_friction,
+                        lateral + surface.lateral_friction,
+                    )
+                });
+        let count = self.contacts.len() as f32;
+        model::SurfaceFriction {
+            longitudinal: longitudinal / count,
+            lateral: lateral / count,
+        }
     }
 
     pub fn split_surface(self) -> bool {
@@ -235,7 +247,7 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
         let surface = ctx.surfaces.get(car.current_surface);
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
         car.wheel_contacts = WheelContacts::sample(&physics, transform.translation, &basis);
-        let contact_lateral_grip = car.wheel_contacts.average_lateral_grip(&ctx.surfaces);
+        let contact_friction = car.wheel_contacts.friction(&ctx.surfaces);
         car.signed_speed = basis.forward_speed;
         car.slip_angle = basis.slip_angle();
         let intent =
@@ -243,27 +255,19 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
         car.drive_mode = intent.drive_mode;
         car.handling_state = model::handling_state(&ctx.tuning, &basis);
         car.wheel_steer_angle = intent.wheel_steer_angle;
-
-        car.yaw += model::steering_yaw_delta(&ctx.tuning, &surface, intent, &basis) * dt;
-        car.yaw += model::slide_yaw_assist(&ctx.tuning, intent, &basis, car.handling_state) * dt;
+        let tire_forces = model::tire_forces(
+            &ctx.tuning,
+            &surface,
+            intent,
+            &basis,
+            car.handling_state,
+            contact_friction,
+        );
+        car.tire_forces = tire_forces;
+        car.yaw += tire_forces.yaw_delta * dt;
+        car.velocity += tire_forces.acceleration * dt;
 
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
-        let drive_force =
-            model::drive_force(&ctx.tuning, &surface, input.throttle, basis.forward_speed);
-        let lateral_grip_multiplier =
-            model::lateral_grip_multiplier(&ctx.tuning, car.handling_state);
-
-        car.velocity += basis.forward * input.throttle * drive_force * dt;
-        car.velocity += basis.forward * surface.boost_force * dt;
-        car.velocity -= basis.right
-            * basis.lateral_speed
-            * ctx.tuning.lateral_grip
-            * contact_lateral_grip
-            * lateral_grip_multiplier
-            * dt;
-        car.velocity *=
-            1.0 / (1.0 + ctx.tuning.drag * surface.drag * surface.rolling_resistance * dt);
-
         let capped_forward_speed = car
             .velocity
             .dot(basis.forward)

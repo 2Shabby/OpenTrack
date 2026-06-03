@@ -6,7 +6,6 @@ use crate::game_state::GameState;
 use crate::ghost::SessionBestGhost;
 use crate::hotseat::HotseatSession;
 use crate::run::RunState;
-use crate::surface::SurfaceLibrary;
 use crate::track::{GeneratedRail, GeneratedRoadSurface, GeneratedTrackInfo, GeneratedTrigger};
 
 pub struct DebugPlugin;
@@ -62,7 +61,6 @@ struct DebugSnapshot<'w, 's> {
     run: Res<'w, RunState>,
     ghost: Res<'w, SessionBestGhost>,
     hotseat: Res<'w, HotseatSession>,
-    surfaces: Res<'w, SurfaceLibrary>,
     track: Res<'w, GeneratedTrackInfo>,
     road_surfaces: Query<'w, 's, (), With<GeneratedRoadSurface>>,
     rails: Query<'w, 's, (), With<GeneratedRail>>,
@@ -84,7 +82,6 @@ fn update_debug_overlay(
     }
 
     let car = *snapshot.car;
-    let params = snapshot.surfaces.get(car.current_surface);
     let best = snapshot
         .hotseat
         .best_summary()
@@ -97,7 +94,7 @@ fn update_debug_overlay(
         .unwrap_or_else(|| "none".to_string());
 
     overlay.0.0 = format!(
-        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nhandling: {}\nslip: {:>4.0} deg\nground: {} {}\nwheels: {}\nsplit: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
+        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nhandling: {}\nslip: {:>4.0} deg\nground: {} {}\nwheels: {}\nsplit: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nnormal: {:>6.0}\nfriction: {:>6.0}\nlong force: {:+6.0}\nlat force: {:+6.0}\nsaturation: {:.2}",
         snapshot.track.seed,
         snapshot.track.piece_count,
         snapshot.track.checkpoint_count,
@@ -126,8 +123,11 @@ fn update_debug_overlay(
         car.wheel_contacts.split_surface(),
         car.throttle,
         car.steer,
-        params.lateral_grip,
-        params.acceleration_multiplier,
+        car.tire_forces.normal_load,
+        car.tire_forces.friction_limit,
+        car.tire_forces.longitudinal_force,
+        car.tire_forces.lateral_force,
+        car.tire_forces.saturation,
     );
 }
 

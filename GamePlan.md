@@ -93,20 +93,35 @@ Generation validator should stay focused on correctness:
 
 Do not reject tracks for subjective variety or boringness in validation.
 
-## Vehicle Direction
+## Vehicle Physics Direction
 
-The vehicle controller remains custom and arcade-focused.
+The vehicle controller remains deterministic and custom, but should move away from direct arcade damping toward a simple coherent tire-force model.
 
 Keep:
 
 * throttle/brake/reverse input
 * signed speed
 * yaw/velocity basis
-* surface multipliers
 * four logical wheel contacts
-* lateral grip and first-pass slide assist
 * predictable reverse steering with reduced authority
 * imported wheel visuals as readability only
+* Avian static collider and spatial query integration
+
+Replace:
+
+* direct lateral velocity damping with lateral tire force derived from slip angle
+* direct throttle acceleration with longitudinal tire force capped by available grip
+* standalone drag/rolling multipliers with rolling resistance, aerodynamic drag, and boost force terms
+* binary slide assist with slip-ratio/slip-angle driven yaw response
+* global grip multipliers with per-wheel contact aggregation and normal-load weighting
+
+Add:
+
+* deterministic mass, gravity, wheelbase, track width, center-of-gravity height, and front/rear weight distribution
+* static and first-pass dynamic load transfer for acceleration, braking, and cornering
+* combined longitudinal/lateral friction budget per surface
+* explicit debug values for normal load, tire force, friction limit, slip angle, and saturation
+* optional tune curves for slip-to-force and drift breakaway/recovery
 
 Avoid:
 
@@ -115,6 +130,7 @@ Avoid:
 * part systems
 * realistic suspension
 * deriving physics from imported art mesh topology
+* delegating the full vehicle controller to the physics solver before the deterministic tire model is solid
 
 ## Dependencies
 
@@ -131,11 +147,11 @@ Current useful crates:
 
 Future crate candidates:
 
+* `bevy_lookup_curve`: slip/grip/steering tuning curves once tire forces replace direct damping
 * `rstar`: broad-phase indexing if piece counts or validation retries grow
-* `bevy_lookup_curve`: tuning curves for steering/grip/drift once constants move to data
 * direct `lyon_tessellation`: only if `bevy_procedural_meshes` stops exposing enough control
 
-Reject crates that force gameplay to depend on crate-specific geometry across module boundaries, break deterministic generation, increase Bevy version skew, or replace the arcade yaw/velocity controller with character-controller semantics.
+Do not add a vehicle-controller crate unless it clearly supports Bevy 0.18, deterministic fixed-step use, custom tire/surface tuning, and does not force a solver-driven drivetrain/suspension model. Reject crates that force gameplay to depend on crate-specific geometry across module boundaries, break deterministic generation, increase Bevy version skew, or replace the custom yaw/velocity controller with character-controller semantics.
 
 ## Implemented Snapshot
 
@@ -171,20 +187,34 @@ Recent fixes:
 * merged rail collision into track-level left/right boundary paths to remove piece seam gaps
 * changed checkpoint/finish detection from point containment to swept trigger crossing
 * tightened primitive validation around rail boundary paths
+* replaced direct acceleration/lateral damping with a deterministic tire-force integration result
+* converted surface handling fields from arcade multipliers to friction, rolling resistance, aerodynamic drag, and boost acceleration
+* added tire-force debug output and tests for surface grip and coasting resistance
 
 ## Pending Work
 
+Driving audit notes:
+
+* `driving.rs` now consumes one tire-force result, but `WheelContacts` still averages surface friction equally.
+* `driving/model.rs` now owns the force/yaw result, but the next pass should split front/rear tires instead of using one aggregate load.
+* `surface.rs` now stores friction/resistance terms; add tune curves only after stable slip and saturation inputs exist.
+* `debug.rs` now shows aggregate tire-force values; extend it after front/rear or per-wheel outputs exist.
+
 Highest priority:
 
-1. Add a richer debug primitive overlay for road mesh vertices, road collider mesh vertices, rail paths, and trigger normals.
-2. Add a debug-only imported vehicle node/axis inspector only if future assets make wheel axes ambiguous.
+1. Add per-wheel normal-load aggregation instead of current aggregate contact friction averaging.
+2. Split tire-force output into front/rear load and force terms so yaw response depends on front steering saturation and rear slip.
+3. Add drift breakaway/recovery thresholds from tire saturation rather than the current slip-angle-only state.
+4. Add tests that prove per-surface saturation and front/rear load transfer change handling predictably.
+5. Evaluate `bevy_lookup_curve` only after stable slip, saturation, and yaw-response scalar inputs exist.
 
 Next:
 
-3. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
-4. Add banked track frames after the flat road/rail/contact pipeline is coherent.
-5. Add `rstar` broad-phase indexing only if validation performance needs it.
-6. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
-7. Add vertical pieces only after slope/ramp recovery and placement validation exist.
-8. Improve setup/results/pause UI polish inside the current shell modules.
-9. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
+6. Add a richer debug primitive overlay for road mesh vertices, road collider mesh vertices, rail paths, and trigger normals.
+7. Add a debug-only imported vehicle node/axis inspector only if future assets make wheel axes ambiguous.
+8. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
+9. Add banked track frames after the flat road/rail/contact pipeline is coherent.
+10. Add `rstar` broad-phase indexing only if validation performance needs it.
+11. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
+12. Add vertical pieces only after slope/ramp recovery and placement validation exist.
+13. Improve setup/results/pause UI polish inside the current shell modules.
