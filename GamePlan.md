@@ -60,10 +60,12 @@ Pinned behavior:
 ```text
 A / ArrowLeft     steer left
 D / ArrowRight    steer right
-positive steer    yaw right in the current +Z-forward car basis
+W + D             yaw right while moving forward
+W + A             yaw left while moving forward
+A or D alone      no idle yaw
 ```
 
-The imported car assets can have their own node axes. Current implementation keeps imported front-wheel steering aligned with gameplay steer. If another asset disagrees, add a debug-only vehicle node/axis inspector and fix the asset binding at the visual layer, not the gameplay input layer.
+Yaw is derived from steering plus signed movement/drive intent, not raw A/D input alone. Reverse uses reverse motion direction with reduced authority. The imported car assets can have their own node axes; if another asset disagrees visually, add a debug-only vehicle node/axis inspector and fix the asset binding at the visual layer, not the gameplay input layer.
 
 ## Track Generation Direction
 
@@ -154,6 +156,7 @@ Recent fixes:
 * removed spawned cuboid wheel visuals
 * removed per-surface wheel recoloring
 * pinned A/D steering semantics with tests
+* removed idle yaw from raw A/D steering
 * aligned imported wheel visual steering with gameplay steer
 * fixed pause-menu cleanup on `Driving` exit
 * changed shell UI cleanup to despawn root entities only, avoiding duplicate child despawn warnings

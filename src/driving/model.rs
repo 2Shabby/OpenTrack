@@ -21,6 +21,8 @@ pub struct DrivingTuning {
     pub slide_yaw_assist_rate: f32,
 }
 
+const MIN_STEERING_SPEED: f32 = 0.5;
+
 impl Default for DrivingTuning {
     fn default() -> Self {
         Self {
@@ -100,6 +102,7 @@ pub struct ControlIntent {
     pub input: ControlInput,
     pub drive_mode: DriveMode,
     pub wheel_steer_angle: f32,
+    steering_motion_direction: f32,
     mode_steering_multiplier: f32,
 }
 
@@ -120,6 +123,7 @@ impl ControlIntent {
             input,
             drive_mode,
             wheel_steer_angle: input.steer * max_visual_angle,
+            steering_motion_direction: steering_motion_direction(input, basis),
             mode_steering_multiplier,
         }
     }
@@ -194,7 +198,7 @@ pub fn slide_yaw_assist(
 
     let speed_ratio = (basis.forward_speed / tuning.max_forward_speed).clamp(0.0, 1.0);
 
-    intent.input.steer * tuning.slide_yaw_assist_rate * speed_ratio
+    -intent.input.steer * tuning.slide_yaw_assist_rate * speed_ratio
 }
 
 pub fn steering_yaw_delta(
@@ -207,7 +211,8 @@ pub fn steering_yaw_delta(
     let steer_authority =
         tuning.min_steer_authority + speed_ratio * (1.0 - tuning.min_steer_authority);
 
-    intent.input.steer
+    -intent.input.steer
+        * intent.steering_motion_direction
         * tuning.steer_rate
         * steer_authority
         * surface.steering_multiplier
@@ -237,6 +242,24 @@ fn axis(positive: bool, negative: bool) -> f32 {
     }
 }
 
+fn steering_motion_direction(input: ControlInput, basis: &MotionBasis) -> f32 {
+    if basis.forward_speed.abs() > MIN_STEERING_SPEED {
+        signed_axis(basis.forward_speed)
+    } else {
+        signed_axis(input.throttle)
+    }
+}
+
+fn signed_axis(value: f32) -> f32 {
+    if value > 0.0 {
+        1.0
+    } else if value < 0.0 {
+        -1.0
+    } else {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -252,6 +275,25 @@ mod tests {
         keys.release(KeyCode::KeyD);
         keys.press(KeyCode::KeyA);
         assert_eq!(ControlInput::from_keys(&keys).steer, -1.0);
+    }
+
+    #[test]
+    fn steering_requires_motion_or_drive_intent() {
+        let tuning = DrivingTuning::default();
+        let surfaces = SurfaceLibrary::default();
+        let surface = surfaces.get(SurfaceKind::Asphalt);
+        let basis = MotionBasis::from_yaw(0.0, Vec3::ZERO);
+        let intent = ControlIntent::from_input(
+            &tuning,
+            ControlInput {
+                throttle: 0.0,
+                steer: -1.0,
+            },
+            &basis,
+            0.42,
+        );
+
+        assert_eq!(steering_yaw_delta(&tuning, &surface, intent, &basis), 0.0);
     }
 
     #[test]
@@ -280,14 +322,14 @@ mod tests {
             0.42,
         );
 
-        assert!(steering_yaw_delta(&tuning, &surface, right, &basis) > 0.0);
-        assert!(steering_yaw_delta(&tuning, &surface, left, &basis) < 0.0);
+        assert!(steering_yaw_delta(&tuning, &surface, right, &basis) < 0.0);
+        assert!(steering_yaw_delta(&tuning, &surface, left, &basis) > 0.0);
         assert!(right.wheel_steer_angle > 0.0);
         assert!(left.wheel_steer_angle < 0.0);
     }
 
     #[test]
-    fn reverse_keeps_steering_direction_but_reduces_authority() {
+    fn reverse_steering_uses_reverse_motion_direction() {
         let tuning = DrivingTuning::default();
         let surfaces = SurfaceLibrary::default();
         let surface = surfaces.get(SurfaceKind::Asphalt);
@@ -302,8 +344,8 @@ mod tests {
         let forward_yaw = steering_yaw_delta(&tuning, &surface, forward, &forward_basis);
         let reverse_yaw = steering_yaw_delta(&tuning, &surface, reverse, &reverse_basis);
 
-        assert!(forward_yaw > 0.0);
+        assert!(forward_yaw < 0.0);
         assert!(reverse_yaw > 0.0);
-        assert!(reverse_yaw < forward_yaw);
+        assert!(reverse_yaw.abs() < forward_yaw.abs());
     }
 }
