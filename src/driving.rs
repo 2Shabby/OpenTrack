@@ -84,6 +84,7 @@ pub struct PlayerCar {
     pub ground_source: GroundSource,
     pub throttle: f32,
     pub steer: f32,
+    pub wheel_steer_angle: f32,
     pub signed_speed: f32,
     pub slip_angle: f32,
     pub drive_mode: DriveMode,
@@ -100,6 +101,7 @@ impl Default for PlayerCar {
             ground_source: GroundSource::Road,
             throttle: 0.0,
             steer: 0.0,
+            wheel_steer_angle: 0.0,
             signed_speed: 0.0,
             slip_angle: 0.0,
             drive_mode: DriveMode::Forward,
@@ -234,9 +236,9 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
             car.reset_to_spawn(&mut transform, *ctx.car_spawn);
         }
 
-        let controls = model::DriverControls::from_keys(&ctx.keys);
-        car.throttle = controls.throttle;
-        car.steer = controls.steer;
+        let input = model::ControlInput::from_keys(&ctx.keys);
+        car.throttle = input.throttle;
+        car.steer = input.steer;
         let ground = physics.ground_at(transform.translation);
         car.current_surface = ground.surface;
         car.ground_source = ground.source;
@@ -247,23 +249,22 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
         let contact_lateral_grip = car.wheel_contacts.average_lateral_grip(&ctx.surfaces);
         car.signed_speed = basis.forward_speed;
         car.slip_angle = basis.slip_angle();
-        car.drive_mode = model::drive_mode(controls.throttle, basis.forward_speed);
+        let intent =
+            model::ControlIntent::from_input(&ctx.tuning, input, &basis, FRONT_WHEEL_MAX_STEER);
+        car.drive_mode = intent.drive_mode;
         car.handling_state = model::handling_state(&ctx.tuning, &basis);
+        car.wheel_steer_angle = intent.wheel_steer_angle;
 
-        car.yaw += model::steering_yaw_delta(&ctx.tuning, &surface, controls, &basis) * dt;
-        car.yaw += model::slide_yaw_assist(&ctx.tuning, controls, &basis, car.handling_state) * dt;
+        car.yaw += model::steering_yaw_delta(&ctx.tuning, &surface, intent, &basis) * dt;
+        car.yaw += model::slide_yaw_assist(&ctx.tuning, intent, &basis, car.handling_state) * dt;
 
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
-        let drive_force = model::drive_force(
-            &ctx.tuning,
-            &surface,
-            controls.throttle,
-            basis.forward_speed,
-        );
+        let drive_force =
+            model::drive_force(&ctx.tuning, &surface, input.throttle, basis.forward_speed);
         let lateral_grip_multiplier =
             model::lateral_grip_multiplier(&ctx.tuning, car.handling_state);
 
-        car.velocity += basis.forward * controls.throttle * drive_force * dt;
+        car.velocity += basis.forward * input.throttle * drive_force * dt;
         car.velocity += basis.forward * surface.boost_force * dt;
         car.velocity -= basis.right
             * basis.lateral_speed
@@ -344,7 +345,7 @@ fn update_wheel_visuals(
         let world_offset = right * wheel.local_offset.x
             + Vec3::Y * wheel.local_offset.y
             + forward * wheel.local_offset.z;
-        let steer_angle = front_wheel_visual_steer(car_state.steer, wheel.front);
+        let steer_angle = front_wheel_visual_steer(car_state.wheel_steer_angle, wheel.front);
 
         transform.translation = car_transform.translation + world_offset;
         transform.rotation =
@@ -356,12 +357,8 @@ fn update_wheel_visuals(
     }
 }
 
-fn front_wheel_visual_steer(steer: f32, front: bool) -> f32 {
-    if front {
-        -steer * FRONT_WHEEL_MAX_STEER
-    } else {
-        0.0
-    }
+fn front_wheel_visual_steer(wheel_steer_angle: f32, front: bool) -> f32 {
+    if front { wheel_steer_angle } else { 0.0 }
 }
 
 fn wheel_color(surface: SurfaceKind) -> Color {
@@ -409,8 +406,8 @@ mod tests {
 
     #[test]
     fn front_wheel_visuals_use_mesh_local_steer_direction() {
-        assert!(front_wheel_visual_steer(1.0, true) < 0.0);
-        assert!(front_wheel_visual_steer(-1.0, true) > 0.0);
+        assert!(front_wheel_visual_steer(0.42, true) > 0.0);
+        assert!(front_wheel_visual_steer(-0.42, true) < 0.0);
         assert_eq!(front_wheel_visual_steer(1.0, false), 0.0);
     }
 }
