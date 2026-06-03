@@ -11,3 +11,7 @@ pub fn road_query_filter() -> SpatialQueryFilter {
 pub fn rail_query_filter() -> SpatialQueryFilter {
     SpatialQueryFilter::from_mask(TRACK_RAIL_LAYER)
 }
+
+pub fn rail_query_filter_excluding(entity: bevy::prelude::Entity) -> SpatialQueryFilter {
+    rail_query_filter().with_excluded_entities([entity])
+}

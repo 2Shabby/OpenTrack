@@ -10,11 +10,10 @@ pub use components::{
     road_collision_layers, road_mesh_collider, static_rigid_body, vehicle_collider,
     vehicle_collision_layers, vehicle_rigid_body,
 };
-#[cfg(test)]
-pub use queries::CarHit;
-#[cfg(test)]
-pub use queries::CarMotion;
-pub use queries::{AvianTrackPhysicsQueries, GroundContact, GroundSource, TrackPhysicsQueries};
+pub use queries::{
+    AvianTrackPhysicsQueries, CarCollisionDebug, CarPose, CollisionState, GroundContact,
+    GroundSource, TrackPhysicsQueries,
+};
 
 pub struct PhysicsQueriesPlugin;
 

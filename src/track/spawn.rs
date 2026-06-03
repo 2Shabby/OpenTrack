@@ -101,12 +101,23 @@ fn spawn_road_collider(commands: &mut Commands, piece: &TrackPiece) {
         Transform::default(),
         RoadCollider {
             surface: piece.surface,
+            boost_direction: piece_boost_direction(piece),
         },
         static_rigid_body(),
         road_collision_layers(),
         road_mesh_collider(vertices, indices),
         SpawnedSceneEntity,
     ));
+}
+
+fn piece_boost_direction(piece: &TrackPiece) -> Option<Vec3> {
+    (piece.surface == SurfaceKind::Boost).then(|| {
+        piece
+            .frames
+            .get(piece.frames.len() / 2)
+            .map(|frame| forward_3d(frame.pose.yaw))
+            .unwrap_or_else(|| forward_3d(piece.entry().yaw))
+    })
 }
 
 fn spawn_rail_span(
