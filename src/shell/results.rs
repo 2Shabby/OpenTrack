@@ -1,6 +1,7 @@
 use bevy::app::AppExit;
 use bevy::prelude::*;
 
+use super::ui::{self, ButtonSpec};
 use crate::game_state::GameState;
 use crate::hotseat::HotseatSession;
 use crate::run::{RunState, RunStatus};
@@ -55,7 +56,6 @@ pub(super) fn spawn(mut commands: Commands, run: Res<RunState>, hotseat: Res<Hot
                     ..default()
                 },
                 TextColor(Color::WHITE),
-                ResultsEntity,
             ));
             parent.spawn((
                 Text::new(format!(
@@ -68,7 +68,6 @@ pub(super) fn spawn(mut commands: Commands, run: Res<RunState>, hotseat: Res<Hot
                     ..default()
                 },
                 TextColor(Color::WHITE),
-                ResultsEntity,
             ));
             parent.spawn((
                 Text::new(leaderboard_text),
@@ -77,7 +76,6 @@ pub(super) fn spawn(mut commands: Commands, run: Res<RunState>, hotseat: Res<Hot
                     ..default()
                 },
                 TextColor(Color::srgb(0.82, 0.86, 0.86)),
-                ResultsEntity,
             ));
 
             button(parent, "Retry", ResultsAction::Retry);
@@ -126,39 +124,21 @@ pub(super) fn handle(
     }
 }
 
-pub(super) fn despawn(
-    mut commands: Commands,
-    entities: Query<Entity, (With<ResultsEntity>, Without<ChildOf>)>,
-) {
-    for entity in &entities {
-        commands.entity(entity).despawn();
-    }
-}
-
 fn button(parent: &mut ChildSpawnerCommands, label: &str, action: ResultsAction) {
-    parent
-        .spawn((
-            Button,
-            Node {
+    ui::button(
+        parent,
+        label,
+        action,
+        ButtonSpec {
+            node: Node {
                 width: px(220),
                 height: px(42),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.15, 0.18, 0.19)),
-            action,
-            ResultsEntity,
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: 18.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                ResultsEntity,
-            ));
-        });
+            font_size: 18.0,
+            background: Color::srgb(0.15, 0.18, 0.19),
+        },
+    );
 }

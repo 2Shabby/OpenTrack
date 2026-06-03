@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use super::SessionSetup;
+use super::ui::{self, ButtonSpec};
 use crate::car_asset::{VehicleKind, VehicleSelection};
 use crate::game_state::GameState;
 use crate::hotseat::HotseatSession;
@@ -64,7 +65,6 @@ pub(super) fn spawn(mut commands: Commands) {
                     ..default()
                 },
                 TextColor(Color::WHITE),
-                SetupEntity,
             ));
 
             row(
@@ -158,15 +158,6 @@ pub(super) fn update_values(setup: Res<SessionSetup>, mut values: Query<(&mut Te
     }
 }
 
-pub(super) fn despawn(
-    mut commands: Commands,
-    entities: Query<Entity, (With<SetupEntity>, Without<ChildOf>)>,
-) {
-    for entity in &entities {
-        commands.entity(entity).despawn();
-    }
-}
-
 fn row(
     parent: &mut ChildSpawnerCommands,
     label: &str,
@@ -175,18 +166,15 @@ fn row(
     up: SetupAction,
 ) {
     parent
-        .spawn((
-            Node {
-                width: px(420),
-                height: px(44),
-                display: Display::Flex,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::SpaceBetween,
-                column_gap: px(12),
-                ..default()
-            },
-            SetupEntity,
-        ))
+        .spawn((Node {
+            width: px(420),
+            height: px(44),
+            display: Display::Flex,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::SpaceBetween,
+            column_gap: px(12),
+            ..default()
+        },))
         .with_children(|parent| {
             parent.spawn((
                 Text::new(label),
@@ -195,7 +183,6 @@ fn row(
                     ..default()
                 },
                 TextColor(Color::WHITE),
-                SetupEntity,
             ));
             button(parent, "-", down);
             parent.spawn((
@@ -206,17 +193,18 @@ fn row(
                 },
                 TextColor(Color::WHITE),
                 value,
-                SetupEntity,
             ));
             button(parent, "+", up);
         });
 }
 
 fn button(parent: &mut ChildSpawnerCommands, label: &str, action: SetupAction) {
-    parent
-        .spawn((
-            Button,
-            Node {
+    ui::button(
+        parent,
+        label,
+        action,
+        ButtonSpec {
+            node: Node {
                 min_width: px(44),
                 height: px(40),
                 padding: UiRect::axes(px(12), px(0)),
@@ -224,19 +212,8 @@ fn button(parent: &mut ChildSpawnerCommands, label: &str, action: SetupAction) {
                 justify_content: JustifyContent::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.15, 0.18, 0.19)),
-            action,
-            SetupEntity,
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: 18.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                SetupEntity,
-            ));
-        });
+            font_size: 18.0,
+            background: Color::srgb(0.15, 0.18, 0.19),
+        },
+    );
 }

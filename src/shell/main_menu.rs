@@ -1,6 +1,7 @@
 use bevy::app::AppExit;
 use bevy::prelude::*;
 
+use super::ui::{self, ButtonSpec};
 use crate::game_state::GameState;
 
 type MenuButtons<'w, 's> = Query<
@@ -44,7 +45,6 @@ pub(super) fn spawn(mut commands: Commands) {
                     ..default()
                 },
                 TextColor(Color::WHITE),
-                MainMenuEntity,
             ));
 
             button(parent, "Start Hotseat", MainMenuAction::StartHotseat);
@@ -71,41 +71,23 @@ pub(super) fn handle(
     }
 }
 
-pub(super) fn despawn(
-    mut commands: Commands,
-    entities: Query<Entity, (With<MainMenuEntity>, Without<ChildOf>)>,
-) {
-    for entity in &entities {
-        commands.entity(entity).despawn();
-    }
-}
-
 fn button(parent: &mut ChildSpawnerCommands, label: &str, action: MainMenuAction) {
-    parent
-        .spawn((
-            Button,
-            Node {
+    ui::button(
+        parent,
+        label,
+        action,
+        ButtonSpec {
+            node: Node {
                 width: px(240),
                 height: px(48),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.15, 0.18, 0.19)),
-            action,
-            MainMenuEntity,
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: 22.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                MainMenuEntity,
-            ));
-        });
+            font_size: 22.0,
+            background: Color::srgb(0.15, 0.18, 0.19),
+        },
+    );
 }
 
 #[cfg(test)]

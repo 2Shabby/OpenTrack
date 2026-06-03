@@ -1,6 +1,7 @@
 use bevy::app::AppExit;
 use bevy::prelude::*;
 
+use super::ui::{self, ButtonSpec};
 use crate::driving::{CarSpawn, PlayerCar};
 use crate::game_state::{GameState, PauseState};
 use crate::run::RunState;
@@ -37,7 +38,7 @@ pub(super) fn toggle_from_keyboard(keys: Res<ButtonInput<KeyCode>>, mut pause: R
 pub(super) fn sync_menu(
     mut commands: Commands,
     pause: Res<PauseState>,
-    menu: Query<Entity, (With<PauseMenuEntity>, Without<ChildOf>)>,
+    menu: Query<Entity, With<PauseMenuEntity>>,
 ) {
     if !pause.is_changed() {
         return;
@@ -95,15 +96,6 @@ pub(super) fn handle_menu(
     }
 }
 
-pub(super) fn despawn(
-    mut commands: Commands,
-    entities: Query<Entity, (With<PauseMenuEntity>, Without<ChildOf>)>,
-) {
-    for entity in &entities {
-        commands.entity(entity).despawn();
-    }
-}
-
 fn reset_player_car(cars: &mut Query<(&mut Transform, &mut PlayerCar)>, car_spawn: CarSpawn) {
     let Some((mut transform, mut car)) = cars.iter_mut().next() else {
         return;
@@ -136,7 +128,6 @@ fn spawn_menu(commands: &mut Commands) {
                     ..default()
                 },
                 TextColor(Color::WHITE),
-                PauseMenuEntity,
             ));
 
             button(parent, "Resume", PauseMenuAction::Resume);
@@ -148,48 +139,20 @@ fn spawn_menu(commands: &mut Commands) {
 }
 
 fn button(parent: &mut ChildSpawnerCommands, label: &str, action: PauseMenuAction) {
-    parent
-        .spawn((
-            Button,
-            Node {
+    ui::button(
+        parent,
+        label,
+        action,
+        ButtonSpec {
+            node: Node {
                 width: px(220),
                 height: px(44),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.16, 0.18, 0.19)),
-            action,
-            PauseMenuEntity,
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: 20.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                PauseMenuEntity,
-            ));
-        });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pause_menu_despawn_removes_menu_entities() {
-        let mut app = App::new();
-        app.add_systems(Update, despawn);
-        app.world_mut().spawn(PauseMenuEntity);
-
-        app.update();
-
-        let mut menus = app
-            .world_mut()
-            .query_filtered::<(), With<PauseMenuEntity>>();
-        assert_eq!(menus.iter(app.world()).count(), 0);
-    }
+            font_size: 20.0,
+            background: Color::srgb(0.16, 0.18, 0.19),
+        },
+    );
 }

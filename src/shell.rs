@@ -2,6 +2,7 @@ mod main_menu;
 mod pause;
 mod results;
 mod setup;
+mod ui;
 
 use bevy::prelude::*;
 
@@ -16,7 +17,10 @@ impl Plugin for ShellPlugin {
             .add_systems(OnEnter(GameState::Setup), setup::spawn)
             .add_systems(OnEnter(GameState::Results), results::spawn)
             .add_systems(OnEnter(GameState::Driving), pause::clear)
-            .add_systems(OnExit(GameState::Driving), (pause::clear, pause::despawn))
+            .add_systems(
+                OnExit(GameState::Driving),
+                (pause::clear, despawn_screen::<pause::PauseMenuEntity>),
+            )
             .add_systems(
                 Update,
                 main_menu::handle.run_if(in_state(GameState::MainMenu)),
@@ -36,9 +40,24 @@ impl Plugin for ShellPlugin {
                     .run_if(in_state(GameState::Driving)),
             )
             .add_systems(Update, results::handle.run_if(in_state(GameState::Results)))
-            .add_systems(OnExit(GameState::MainMenu), main_menu::despawn)
-            .add_systems(OnExit(GameState::Setup), setup::despawn)
-            .add_systems(OnExit(GameState::Results), results::despawn);
+            .add_systems(
+                OnExit(GameState::MainMenu),
+                despawn_screen::<main_menu::MainMenuEntity>,
+            )
+            .add_systems(
+                OnExit(GameState::Setup),
+                despawn_screen::<setup::SetupEntity>,
+            )
+            .add_systems(
+                OnExit(GameState::Results),
+                despawn_screen::<results::ResultsEntity>,
+            );
+    }
+}
+
+fn despawn_screen<T: Component>(mut commands: Commands, entities: Query<Entity, With<T>>) {
+    for entity in &entities {
+        commands.entity(entity).despawn();
     }
 }
 
