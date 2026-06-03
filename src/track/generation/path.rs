@@ -82,8 +82,8 @@ fn arc_frames(
     let curve = FunctionCurve::new(Interval::UNIT, move |t| {
         let rotation = side * angle * t;
         Pose2::new(
-            center + rotate_2d(radius_vector, rotation),
-            entry.yaw + side * angle * t,
+            center + rotate_2d(radius_vector, -rotation),
+            entry.yaw + rotation,
         )
     });
 
