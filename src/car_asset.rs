@@ -1,5 +1,13 @@
 use bevy::prelude::*;
 
+pub struct CarAssetPlugin;
+
+impl Plugin for CarAssetPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<VehicleSelection>();
+    }
+}
+
 #[derive(Clone, Copy, Resource)]
 pub struct VehicleSelection {
     pub vehicle: VehicleKind,

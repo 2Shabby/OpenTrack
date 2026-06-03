@@ -15,6 +15,7 @@ mod track;
 use bevy::prelude::*;
 use bevy_obj::ObjPlugin;
 use bevy_ufbx::FbxPlugin;
+use car_asset::CarAssetPlugin;
 use debug::DebugPlugin;
 use driving::DrivingPlugin;
 use ghost::GhostPlugin;
@@ -41,6 +42,7 @@ fn main() {
         .init_state::<game_state::GameState>()
         .add_plugins((
             SurfacePlugin,
+            CarAssetPlugin,
             PhysicsQueriesPlugin,
             TrackPlugin,
             DrivingPlugin,

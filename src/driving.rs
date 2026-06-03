@@ -6,7 +6,6 @@ use bevy::prelude::*;
 
 pub use model::{DriveMode, DrivingTuning, HandlingState};
 
-use crate::car_asset::VehicleSelection;
 use crate::game_state::{GameState, not_paused};
 use crate::geometry::{forward_3d, right_3d, yaw_rotation};
 use crate::physics::{
@@ -23,15 +22,15 @@ const BODY_PITCH_RATE: f32 = 0.05;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
 const FRONT_WHEEL_MAX_STEER: f32 = 0.42;
 
-type WheelVisualQuery<'w, 's> = Query<
+type ContactWheelVisualQuery<'w, 's> = Query<
     'w,
     's,
     (
         &'static mut Transform,
-        &'static WheelVisual,
+        &'static ContactWheelVisual,
         &'static MeshMaterial3d<StandardMaterial>,
     ),
-    (With<WheelVisual>, Without<PlayerCar>),
+    (With<ContactWheelVisual>, Without<PlayerCar>),
 >;
 
 #[derive(Clone, Copy, Resource)]
@@ -61,7 +60,6 @@ impl Plugin for DrivingPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(DrivingTuning::default())
             .insert_resource(CarSpawn::default())
-            .insert_resource(VehicleSelection::default())
             .add_systems(
                 FixedUpdate,
                 drive_car.run_if(in_state(GameState::Driving).and(not_paused)),
@@ -124,10 +122,10 @@ impl PlayerCar {
 pub struct ChaseCamera;
 
 #[derive(Component)]
-pub struct CarBodyVisual;
+pub struct VehicleSceneRoot;
 
 #[derive(Component)]
-pub struct WheelVisual {
+pub struct ContactWheelVisual {
     pub local_offset: Vec3,
     pub front: bool,
     pub corner: WheelCorner,
@@ -319,7 +317,7 @@ fn sample_wheel_contacts(
 
 fn update_car_body_visual(
     car: Single<(&Transform, &PlayerCar)>,
-    mut body: Single<&mut Transform, (With<CarBodyVisual>, Without<PlayerCar>)>,
+    mut body: Single<&mut Transform, (With<VehicleSceneRoot>, Without<PlayerCar>)>,
 ) {
     let (car_transform, car_state) = *car;
     let roll = car_state.steer * car_state.velocity.length() * BODY_ROLL_RATE * -0.01;
@@ -333,7 +331,7 @@ fn update_car_body_visual(
 fn update_wheel_visuals(
     time: Res<Time>,
     car: Single<(&Transform, &PlayerCar)>,
-    mut wheels: WheelVisualQuery,
+    mut wheels: ContactWheelVisualQuery,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let (car_transform, car_state) = *car;
@@ -348,8 +346,7 @@ fn update_wheel_visuals(
         let steer_angle = front_wheel_visual_steer(car_state.wheel_steer_angle, wheel.front);
 
         transform.translation = car_transform.translation + world_offset;
-        transform.rotation =
-            yaw_rotation(car_state.yaw + steer_angle) * Quat::from_rotation_x(spin);
+        transform.rotation = contact_wheel_rotation(car_state.yaw, steer_angle, spin);
 
         if let Some(material) = materials.get_mut(material) {
             material.base_color = wheel_color(car_state.wheel_contacts.at(wheel.corner));
@@ -359,6 +356,10 @@ fn update_wheel_visuals(
 
 fn front_wheel_visual_steer(wheel_steer_angle: f32, front: bool) -> f32 {
     if front { wheel_steer_angle } else { 0.0 }
+}
+
+fn contact_wheel_rotation(car_yaw: f32, steer_angle: f32, spin: f32) -> Quat {
+    yaw_rotation(car_yaw + steer_angle) * Quat::from_rotation_x(spin)
 }
 
 fn wheel_color(surface: SurfaceKind) -> Color {
@@ -409,5 +410,14 @@ mod tests {
         assert!(front_wheel_visual_steer(0.42, true) > 0.0);
         assert!(front_wheel_visual_steer(-0.42, true) < 0.0);
         assert_eq!(front_wheel_visual_steer(1.0, false), 0.0);
+    }
+
+    #[test]
+    fn contact_wheel_rotation_points_with_steer_direction() {
+        let right = contact_wheel_rotation(0.0, 0.42, 0.0) * Vec3::Z;
+        let left = contact_wheel_rotation(0.0, -0.42, 0.0) * Vec3::Z;
+
+        assert!(right.x > 0.0);
+        assert!(left.x < 0.0);
     }
 }

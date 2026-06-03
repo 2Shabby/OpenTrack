@@ -12,7 +12,9 @@ use super::piece::{TrackPieceMarker, TrackRailSpan, TrackRoadSpan, TrackTriggerL
 use super::road_mesh::road_surface_mesh;
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
 use crate::car_asset::VehicleSelection;
-use crate::driving::{CarBodyVisual, CarSpawn, ChaseCamera, PlayerCar, WheelCorner, WheelVisual};
+use crate::driving::{
+    CarSpawn, ChaseCamera, ContactWheelVisual, PlayerCar, VehicleSceneRoot, WheelCorner,
+};
 use crate::geometry::{forward_3d, xz_translation, yaw_rotation};
 use crate::physics::{
     RailCollider, RoadCollider, rail_collider, rail_collision_layers, road_collider,
@@ -200,7 +202,7 @@ fn spawn_car(
         SceneRoot(asset_server.load(vehicle_selection.vehicle.fbx_scene_path())),
         Transform::from_translation(car_spawn.translation)
             .with_rotation(yaw_rotation(car_spawn.yaw)),
-        CarBodyVisual,
+        VehicleSceneRoot,
         SpawnedSceneEntity,
     ));
 
@@ -221,7 +223,7 @@ fn spawn_car(
             Mesh3d(wheel_mesh.clone()),
             MeshMaterial3d(wheel_material),
             Transform::from_translation(car_spawn.translation),
-            WheelVisual {
+            ContactWheelVisual {
                 local_offset,
                 front,
                 corner,
