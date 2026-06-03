@@ -1,7 +1,5 @@
 use bevy::prelude::*;
 
-use crate::spatial::OrientedRect;
-
 pub struct SurfacePlugin;
 
 impl Plugin for SurfacePlugin {
@@ -113,10 +111,4 @@ impl SurfaceLibrary {
             SurfaceKind::Grass => self.grass,
         }
     }
-}
-
-#[derive(Component)]
-pub struct SurfaceZone {
-    pub kind: SurfaceKind,
-    pub bounds: OrientedRect,
 }

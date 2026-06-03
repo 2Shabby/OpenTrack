@@ -15,10 +15,13 @@ use crate::car_asset::sports_car_mesh;
 use crate::driving::{
     CarBodyVisual, CarPaint, CarSpawn, ChaseCamera, PlayerCar, WheelCorner, WheelVisual,
 };
-use crate::physics::RailCollider;
+use crate::physics::{
+    RailCollider, RoadCollider, rail_collider, rail_collision_layers, road_collider,
+    road_collision_layers, static_rigid_body,
+};
 use crate::run::{TrackTrigger, TrackTriggerKind};
 use crate::spatial::forward_3d;
-use crate::surface::{SurfaceKind, SurfaceZone};
+use crate::surface::SurfaceKind;
 
 pub fn spawn_generated_track(
     mut commands: Commands,
@@ -103,11 +106,24 @@ fn spawn_road_span(
         Mesh3d(meshes.add(road_surface_mesh(&road.frames, TRACK_WIDTH))),
         MeshMaterial3d(road_material),
         Transform::default(),
-        SurfaceZone {
-            kind: road.surface,
+        GeneratedRoadSurface,
+        SpawnedSceneEntity,
+    ));
+
+    commands.spawn((
+        Transform::from_xyz(
+            road.bounds.pose.position.x,
+            -0.04,
+            road.bounds.pose.position.y,
+        )
+        .with_rotation(Quat::from_rotation_y(road.bounds.pose.yaw)),
+        RoadCollider {
+            surface: road.surface,
             bounds: road.bounds,
         },
-        GeneratedRoadSurface,
+        static_rigid_body(),
+        road_collision_layers(),
+        road_collider(TRACK_WIDTH, 0.08, road.length),
         SpawnedSceneEntity,
     ));
 }
@@ -130,6 +146,9 @@ fn spawn_rail_span(
         RailCollider {
             bounds: rail.bounds,
         },
+        static_rigid_body(),
+        rail_collision_layers(),
+        rail_collider(RAIL_THICKNESS, RAIL_HEIGHT, rail.length),
         GeneratedRail,
         SpawnedSceneEntity,
     ));

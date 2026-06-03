@@ -448,7 +448,6 @@ Source layout target:
 
 ```text
 src/main.rs
-src/app.rs
 src/driving/
 src/surface/
 src/track/
@@ -485,8 +484,10 @@ S / ArrowDown     brake/reverse
 A / ArrowLeft     steer left
 D / ArrowRight    steer right
 R                 reset car
-P                 add local hotseat player while waiting
-N                 next hotseat player after finish
+Escape            pause/resume
+F3                debug overlay
+P                 add local hotseat player while waiting in the driving sandbox
+N                 next hotseat player after finish in the driving sandbox
 ```
 
 Implemented systems:
@@ -495,32 +496,56 @@ Implemented systems:
 * Layered arcade driving model with explicit forward/braking/reverse modes.
 * Data-driven surfaces: asphalt, dirt, ice, boost.
 * Project-owned physics-query boundary for ground/surface and rail collision.
-* Modular track piece spawning with rails, checkpoint triggers, and finish triggers.
+* Deterministic modular track generation from seed, length, difficulty, and surface mix.
+* Straight and sampled constant-curvature curve pieces.
+* Modular track piece spawning with generated road meshes, rails, checkpoint triggers, and finish triggers.
+* Track validation for finish count, checkpoint-before-finish order, piece frame counts, segment lengths, rail counts, trigger alignment, route yaw bounds, recovery after curves, overlap rejection, and piece continuity.
 * Session timer, checkpoint progress, restart, hotseat players, in-memory leaderboard, and session-only ghost replay.
 * Realistic sports-car mesh from `~/Downloads/Realistic Car Pack - Nov 2018.zip`.
 * Off-track grass/forest scenery using textures from `~/Downloads/LowpolyForestPack.zip`.
 * Debug overlay for seed, pieces, generated entity counts, player state, run state, speed, signed speed, drive mode, surface, and tuning values.
+* App state shell with main menu, setup screen, driving state, pause overlay, results screen, and clean spawned-scene teardown.
+* Setup controls for player count, seed, track length, difficulty, surface mix, and car color.
 
 Current constraints:
 
 * No save-game mechanics, persisted best times, player profiles, or shared-track storage.
 * Forest FBX files are not loaded directly; scenery uses generated low-poly geometry with the pack textures.
-* Generated tracks are currently straight piece chains only.
-* No app state shell yet: gameplay starts directly at the driving sandbox.
-* No main menu, pause menu, setup screens, car color selection, or results screen yet.
+* Hotseat player setup currently chooses only player count; player names are generated as `Driver N`.
+* Pause is represented by `PauseState` during `GameState::Driving`, not as a separate `Paused` app state.
+* Track generation has flat straights and flat curves only; no slopes, ramps, jumps, bridges, or drops yet.
+* Recipes expose only seed, length, difficulty, and surface mix; speed bias, technicality, verticality, piece sets, themes, and rule sets are not modeled yet.
+* Ghosts are session-only best ghosts and are not keyed by player, recipe, seed, generator version, or physics tuning version.
+* Road and rail queries are backed by Avian static cuboid colliders, with project-owned metadata still used for surface lookup and gameplay response semantics.
+* Road/rail colliders are on separate collision layers so future dynamic/query-only colliders do not pollute track queries.
+* No audio, controller support, input rebinding, player profiles, or persisted settings.
+
+Completed recent code changes:
+
+1. Added Bevy app states for `MainMenu`, `Setup`, `Driving`, and `Results`.
+2. Moved track, car, camera, lighting, ghost, and debug spawning behind state transitions.
+3. Added main menu and local hotseat setup flow.
+4. Added recipe controls for seed, length, difficulty, and surface mix.
+5. Added car color selection using the existing sports-car mesh.
+6. Added pause overlay with resume, restart, setup/menu, and quit actions.
+7. Added post-run/results screen with leaderboard and next-player/retry actions.
+8. Added sampled curve generation and road mesh generation from path frames.
+9. Fixed rail collision query selection to resolve the deepest overlapping rail contact.
+10. Added Avian physics plugins and static rail colliders behind the project-owned physics-query boundary.
+11. Reworked track generation into sequential candidate assembly with validation before accepting each piece.
+12. Added oriented-road overlap checks and multi-seed generation validation tests.
+13. Added static Avian road colliders and Avian-backed ground raycasts for surface lookup.
+14. Added road/rail collision layers and layer-filtered spatial queries.
+15. Added route-level generation checks for checkpoint order, route yaw bounds, adjacent-curve recovery, and curve sample coherence.
 
 Next code changes:
 
-1. Add Bevy app states for `MainMenu`, `Setup`, `Driving`, `Paused`, and `Results`.
-2. Move direct startup spawning behind state transitions so a session can be created, torn down, and recreated cleanly.
-3. Add basic main menu and hotseat setup screen.
-4. Add recipe/seed/length selection.
-5. Add car color selection using the existing sports-car mesh.
-6. Add pause menu with resume, restart, setup/menu, and quit actions.
-7. Add post-run/results screen with leaderboard and next-player/retry actions.
-8. Expand procedural assembly from fixed straight chain to generated piece sequences.
-9. Add simple curve pieces only after curved road visuals and colliders share one geometry contract.
-10. Split tuning values into editable resources or RON assets once values settle.
+1. Replace hard-coded candidate lists with piece metadata, connection rules, and candidate weighting.
+2. Add route-level validation for generated sequence variety and minimum straight recovery distance by speed/difficulty.
+3. Add dedicated road/rail primitive validation that compares generated mesh edges, collider spans, and trigger normals for each segment.
+4. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
+5. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
+6. Keep UI/player/profile/persistence work deferred until generation and physics-query stability improve.
 
 ## Current Code Slice
 
@@ -529,24 +554,30 @@ Procedural assembly has started:
 * `TrackRecipe` owns seed and piece count.
 * Startup track pieces are generated deterministically from recipe + seed.
 * Surfaces are assigned by deterministic RNG.
-* Surface zones, rail colliders, and checkpoint/finish triggers now use oriented bounds.
+* Road colliders, rail colliders, and checkpoint/finish triggers now use oriented bounds.
 * Track generation now stores explicit entry/exit transforms per piece to keep adjacent pieces and lines aligned.
-* Straight pieces now derive center pose, length, road bounds, rails, and surface zones from entry/exit centerline frames.
+* Track generation assembles pieces sequentially and rejects invalid candidates before appending them.
+* Straight pieces now derive center pose, length, road bounds, rails, and road colliders from entry/exit centerline frames.
 * Road surface visuals are generated as meshes from path frames instead of spawned as rotated plane primitives.
 * Generated tracks now include deterministic sampled arc curves.
-* Road surface zones and rails are generated per sampled path segment, not per whole piece rectangle.
+* Road colliders and rails are generated per sampled path segment, not per whole piece rectangle.
 * Each path segment now owns road surface bounds and optional rail bounds from one primitive.
 * Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
 * Generated scene entities are tagged by semantic role: environment, scenery, road surface, rail, trigger, player, camera, and lighting.
 * Shared spatial types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
-* Surface zones, rail colliders, triggers, and track pieces no longer carry parallel center/yaw/extent conventions.
+* Road colliders, rail colliders, triggers, and track pieces no longer carry parallel center/yaw/extent conventions.
 * Physics query results, hotseat state, ghost samples, and car reset semantics have been narrowed to the minimum current API.
-* Generated tracks intentionally use straight modules only until real curved road geometry/colliders are implemented.
+* Avian `PhysicsPlugins` are installed through the local physics plugin.
+* Spawned road spans have static Avian cuboid colliders and project-owned `RoadCollider` metadata.
+* Spawned rails have static Avian cuboid colliders and project-owned `RailCollider` metadata.
+* Ground/surface lookup uses Avian downward raycasts filtered to the road collision layer.
+* Car-vs-rail collision uses Avian shape intersection queries to find overlapping static rail colliders, then resolves through the project-owned response type.
+* Generated tracks use straight modules and sampled flat curves; vertical modules are still pending.
 * Rail collision resolves laterally rather than using generic rectangle end-cap normals.
 * The generated track keeps one checkpoint and one finish for the current run-loop contract.
 * Debug overlay shows generated seed, piece count, and actual/expected road/rail/trigger counts.
-* Driving model now reports slip angle and grip/sliding state for drift tuning without changing handling yet.
-* App now starts at a basic main menu and enters gameplay through one `MainMenu -> Driving` state transition.
+* Driving model reports slip angle and grip/sliding state, then applies first-pass drift lateral-grip and yaw assists.
+* App now starts at a basic main menu and enters gameplay through `MainMenu -> Setup -> Driving`.
 * Track/session spawning now happens on entering `Driving`; generated scene cleanup is state-owned.
 * Escape opens an in-game pause overlay; resume preserves the active driving scene and main menu exits cleanly.
 * Setup screen configures player count, track seed, track length, and car color before spawning gameplay.
@@ -556,7 +587,8 @@ Procedural assembly has started:
 * Car visuals now use separate body and wheel primitives with body roll/pitch, front-wheel steering, and wheel spin.
 * In-run HUD shows driver, timer, checkpoint progress, speed, best time, and ghost time; verbose debug is toggled with F3.
 * Grass field, forest, and rocks are placed relative to generated track bounds instead of fixed world coordinates.
-* Track validation now checks empty tracks, missing finish, short pieces, zero-length segments, connections, and generated counts.
+* Track validation now checks empty tracks, missing finish/checkpoint, checkpoint-before-finish order, short pieces, zero-length segments, route yaw bounds, adjacent curves, connections, and generated counts.
+* Track validation now rejects non-adjacent road overlap using oriented rectangle SAT checks.
 * Four-wheel contact samples now affect lateral grip, so split-surface cases change handling.
 * Off-track fallback surface is now grass instead of asphalt, with slower acceleration and higher drag.
 * Wheel visuals tint by contact surface, and HUD shows handling/surface state.
@@ -565,13 +597,13 @@ Procedural assembly has started:
 * Track spawning and validation now consume the same generated piece geometry instead of rebuilding road, rail, and trigger bounds separately.
 * Curves are now explicit generated piece kinds instead of straight pieces with curved frames, and generation inserts straight recovery after curves.
 * Pause flow now supports resume, restart, setup, main menu, and quit with run state reset on scene exits.
-* Ground queries now distinguish road/off-track source from handling surface; HUD/debug show both instead of treating surface lookup misses as just another road surface.
+* Ground queries now distinguish road/off-track source from handling surface through Avian road raycasts; HUD/debug show both instead of treating lookup misses as just another road surface.
 
 ## Pending Work
 
 ### Product Shell
 
-Current shell flow is prototype-complete for the local session loop. Remaining work is presentation polish and more ergonomic setup controls, not core state ownership.
+Current shell flow is prototype-complete for the local session loop. Product-shell polish is deferred while physics queries and sequential generation are the active focus.
 
 ### Gameplay and Track
 
@@ -579,9 +611,11 @@ Pending:
 
 * expand the piece-library contract with authored piece metadata, difficulty tags, and connection rules
 * expand generated piece sequences beyond straight, curve, checkpoint, and finish pieces
-* improve curve piece variety and validation
+* improve curve piece variety and primitive validation beyond constant-radius arcs
 * checkpoint and finish line placement for every future piece type
-* add overlap and unreachable-finish validation once routes become more complex
+* add metadata-driven connection rules and candidate weighting
+* add difficulty-aware route-level recovery spacing after high-speed curves and future jumps/drops
+* add unreachable-finish validation once routes become more complex
 
 ### Vehicle and Feel
 
@@ -608,7 +642,6 @@ Pending:
 
 Pending:
 
-* support multiple car colors from the same mesh
 * improve track visuals beyond flat planes and cuboid rails
 * add simple audio feedback after the core loop is stable
 
@@ -645,12 +678,12 @@ Each surface changes driving lines clearly.
 
 ### 3. Track Pieces — In Progress
 
-Basic pieces connected in code/data: straight, curve, slope, ramp/drop, checkpoint, finish.
+Basic pieces connected in code/data: straight, curve, checkpoint, finish. Slopes, ramps, drops, bridges, and elevated supports are still pending.
 
 Success condition:
 
 ```text
-A complete piece-chain run is possible before procedural generation exists.
+A complete piece-chain run is possible from the procedural generator.
 ```
 
 ### 4. Complete Run — Prototype Complete
@@ -663,7 +696,7 @@ Success condition:
 A full run can be completed, timed, and retried.
 ```
 
-### 5. Hotseat — Prototype Complete, UI Pending
+### 5. Hotseat — Prototype Complete, Setup Polish Pending
 
 Player list, turn order, leaderboard.
 
@@ -673,9 +706,9 @@ Success condition:
 Many players can take turns on the same track.
 ```
 
-### 6. Ghosts — Prototype Complete, UI Pending
+### 6. Ghosts — Prototype Complete, Scope Narrow
 
-Sampled transform replay for best/previous runs.
+Sampled transform replay for the current session best run.
 
 Success condition:
 
@@ -693,7 +726,7 @@ Success condition:
 Generated tracks are playable, repeatable, and fun enough to retry.
 ```
 
-### 8. Product Shell — Pending
+### 8. Product Shell — Prototype Complete
 
 Main menu, setup, pause, results, and leaderboard screens.
 
@@ -703,7 +736,7 @@ Success condition:
 A local session can be configured, played, paused, completed, and repeated without debug-key workflows.
 ```
 
-### 9. Vehicle Feel Upgrade — Pending
+### 9. Vehicle Feel Upgrade — In Progress
 
 Four wheel contact semantics, drift assist cases, visual wheel motion, and body roll/pitch.
 

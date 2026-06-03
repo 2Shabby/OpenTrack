@@ -1,14 +1,16 @@
 mod model;
 
+use avian3d::prelude::SpatialQuery;
 use bevy::prelude::*;
 
 pub use model::{DriveMode, DrivingTuning, HandlingState};
 
 use crate::game_state::{GameState, not_paused};
 use crate::physics::{
-    EcsTrackPhysicsQueries, GroundContact, GroundSource, RailCollider, TrackPhysicsQueries,
+    AvianTrackPhysicsQueries, GroundContact, GroundSource, RailCollider, RoadCollider,
+    TrackPhysicsQueries,
 };
-use crate::surface::{SurfaceKind, SurfaceLibrary, SurfaceZone};
+use crate::surface::{SurfaceKind, SurfaceLibrary};
 
 const DEFAULT_CAR_START: Vec3 = Vec3::new(0.0, 0.05, -26.0);
 const WHEEL_SAMPLE_HALF_WIDTH: f32 = 0.82;
@@ -215,12 +217,13 @@ fn drive_car(
     car_spawn: Res<CarSpawn>,
     tuning: Res<DrivingTuning>,
     surfaces: Res<SurfaceLibrary>,
-    zones: Query<&SurfaceZone>,
-    rails: Query<&RailCollider>,
+    spatial_query: SpatialQuery,
+    roads: Query<(Entity, &RoadCollider)>,
+    rails: Query<(Entity, &RailCollider)>,
     mut cars: Query<(&mut Transform, &mut PlayerCar)>,
 ) {
     let dt = time.delta_secs();
-    let physics = EcsTrackPhysicsQueries::new(&zones, &rails);
+    let physics = AvianTrackPhysicsQueries::new(&spatial_query, &roads, &rails);
 
     for (mut transform, mut car) in &mut cars {
         if keys.just_pressed(KeyCode::KeyR) {
@@ -269,7 +272,7 @@ fn drive_car(
         car.velocity = basis.forward * capped_forward_speed + basis.right * capped_lateral_speed;
 
         let mut next_translation = transform.translation + car.velocity * dt;
-        if let Some(hit) = physics.cast_car_shape(next_translation, car.velocity) {
+        if let Some(hit) = physics.cast_car_shape(next_translation, car.yaw, car.velocity) {
             next_translation += hit.normal * (hit.penetration + 0.01);
 
             let inward_speed = car.velocity.dot(hit.normal);
