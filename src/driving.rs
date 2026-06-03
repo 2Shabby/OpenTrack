@@ -22,6 +22,7 @@ const BODY_PITCH_RATE: f32 = 0.05;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
 const FRONT_WHEEL_MAX_STEER: f32 = 0.42;
 const ASSET_WHEEL_SPIN_RATE: f32 = 2.0;
+const ASSET_WHEEL_STEER_SIGN: f32 = -1.0;
 
 #[derive(Clone, Copy, Resource)]
 pub struct CarSpawn {
@@ -122,7 +123,13 @@ pub struct VehicleSceneRoot;
 #[derive(Component)]
 pub struct AssetWheelVisual {
     base_rotation: Quat,
-    pub front: bool,
+    role: AssetWheelRole,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AssetWheelRole {
+    Front,
+    Rear,
 }
 
 #[derive(Clone, Copy)]
@@ -310,13 +317,13 @@ fn bind_imported_vehicle_wheels(
     wheels: Query<(Entity, &Name, &Transform), Without<AssetWheelVisual>>,
 ) {
     for (entity, name, transform) in &wheels {
-        let Some(front) = imported_wheel_role(name.as_str()) else {
+        let Some(role) = imported_wheel_role(name.as_str()) else {
             continue;
         };
 
         commands.entity(entity).insert(AssetWheelVisual {
             base_rotation: transform.rotation,
-            front,
+            role,
         });
     }
 }
@@ -328,24 +335,27 @@ fn update_imported_wheel_visuals(
 ) {
     let spin = time.elapsed_secs_wrapped() * car.signed_speed * ASSET_WHEEL_SPIN_RATE;
     for (mut transform, wheel) in &mut wheels {
-        let steer_angle = front_wheel_visual_steer(car.wheel_steer_angle, wheel.front);
+        let steer_angle = asset_wheel_steer(car.wheel_steer_angle, wheel.role);
         transform.rotation = asset_wheel_rotation(wheel.base_rotation, steer_angle, spin);
     }
 }
 
-fn front_wheel_visual_steer(wheel_steer_angle: f32, front: bool) -> f32 {
-    if front { wheel_steer_angle } else { 0.0 }
+fn asset_wheel_steer(wheel_steer_angle: f32, role: AssetWheelRole) -> f32 {
+    match role {
+        AssetWheelRole::Front => wheel_steer_angle * ASSET_WHEEL_STEER_SIGN,
+        AssetWheelRole::Rear => 0.0,
+    }
 }
 
 fn asset_wheel_rotation(base_rotation: Quat, steer_angle: f32, spin: f32) -> Quat {
     base_rotation * Quat::from_rotation_y(steer_angle) * Quat::from_rotation_x(spin)
 }
 
-fn imported_wheel_role(name: &str) -> Option<bool> {
+fn imported_wheel_role(name: &str) -> Option<AssetWheelRole> {
     if name.contains("FrontLeftWheel") || name.contains("FrontRightWheel") {
-        Some(true)
+        Some(AssetWheelRole::Front)
     } else if name.contains("BackWheels") {
-        Some(false)
+        Some(AssetWheelRole::Rear)
     } else {
         None
     }
@@ -385,16 +395,18 @@ mod tests {
     }
 
     #[test]
-    fn front_wheel_visuals_use_mesh_local_steer_direction() {
-        assert!(front_wheel_visual_steer(0.42, true) > 0.0);
-        assert!(front_wheel_visual_steer(-0.42, true) < 0.0);
-        assert_eq!(front_wheel_visual_steer(1.0, false), 0.0);
+    fn imported_front_wheels_convert_gameplay_steer_to_asset_axis() {
+        assert!(asset_wheel_steer(0.42, AssetWheelRole::Front) < 0.0);
+        assert!(asset_wheel_steer(-0.42, AssetWheelRole::Front) > 0.0);
+        assert_eq!(asset_wheel_steer(1.0, AssetWheelRole::Rear), 0.0);
     }
 
     #[test]
-    fn contact_wheel_rotation_points_with_steer_direction() {
-        let right = asset_wheel_rotation(Quat::IDENTITY, 0.42, 0.0) * Vec3::Z;
-        let left = asset_wheel_rotation(Quat::IDENTITY, -0.42, 0.0) * Vec3::Z;
+    fn imported_wheel_rotation_points_with_steer_direction() {
+        let right_steer = asset_wheel_steer(0.42, AssetWheelRole::Front);
+        let left_steer = asset_wheel_steer(-0.42, AssetWheelRole::Front);
+        let right = asset_wheel_rotation(Quat::IDENTITY, right_steer, 0.0) * -Vec3::Z;
+        let left = asset_wheel_rotation(Quat::IDENTITY, left_steer, 0.0) * -Vec3::Z;
 
         assert!(right.x > 0.0);
         assert!(left.x < 0.0);
@@ -404,15 +416,15 @@ mod tests {
     fn imported_vehicle_wheel_names_bind_to_visual_roles() {
         assert_eq!(
             imported_wheel_role("SportsCar_FrontLeftWheel_Cylinder.013"),
-            Some(true)
+            Some(AssetWheelRole::Front)
         );
         assert_eq!(
             imported_wheel_role("SportsCar2_FrontRightWheel_Cylinder.018"),
-            Some(true)
+            Some(AssetWheelRole::Front)
         );
         assert_eq!(
             imported_wheel_role("SportsCar_BackWheels_Cylinder.004"),
-            Some(false)
+            Some(AssetWheelRole::Rear)
         );
         assert_eq!(imported_wheel_role("SportsCar_Cube.005"), None);
     }

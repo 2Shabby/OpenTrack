@@ -59,7 +59,7 @@ pub(super) fn handle_menu(
     mut next_state: ResMut<NextState<GameState>>,
     mut exit: MessageWriter<AppExit>,
     car_spawn: Res<CarSpawn>,
-    mut car: Single<(&mut Transform, &mut PlayerCar)>,
+    mut cars: Query<(&mut Transform, &mut PlayerCar)>,
     buttons: PauseButtons,
 ) {
     if !pause.paused {
@@ -75,8 +75,7 @@ pub(super) fn handle_menu(
             PauseMenuAction::Resume => pause.paused = false,
             PauseMenuAction::Restart => {
                 run.reset();
-                let (transform, car) = &mut *car;
-                car.reset_to_spawn(transform, *car_spawn);
+                reset_player_car(&mut cars, *car_spawn);
                 pause.paused = false;
             }
             PauseMenuAction::Setup => {
@@ -94,6 +93,20 @@ pub(super) fn handle_menu(
             }
         }
     }
+}
+
+pub(super) fn despawn(mut commands: Commands, entities: Query<Entity, With<PauseMenuEntity>>) {
+    for entity in &entities {
+        commands.entity(entity).despawn();
+    }
+}
+
+fn reset_player_car(cars: &mut Query<(&mut Transform, &mut PlayerCar)>, car_spawn: CarSpawn) {
+    let Some((mut transform, mut car)) = cars.iter_mut().next() else {
+        return;
+    };
+
+    car.reset_to_spawn(&mut transform, car_spawn);
 }
 
 fn spawn_menu(commands: &mut Commands) {
@@ -157,4 +170,23 @@ fn button(parent: &mut ChildSpawnerCommands, label: &str, action: PauseMenuActio
                 PauseMenuEntity,
             ));
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pause_menu_despawn_removes_menu_entities() {
+        let mut app = App::new();
+        app.add_systems(Update, despawn);
+        app.world_mut().spawn(PauseMenuEntity);
+
+        app.update();
+
+        let mut menus = app
+            .world_mut()
+            .query_filtered::<(), With<PauseMenuEntity>>();
+        assert_eq!(menus.iter(app.world()).count(), 0);
+    }
 }

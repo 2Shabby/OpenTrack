@@ -243,6 +243,18 @@ mod tests {
     use crate::surface::{SurfaceKind, SurfaceLibrary};
 
     #[test]
+    fn keyboard_steer_axis_maps_a_left_and_d_right() {
+        let mut keys = ButtonInput::<KeyCode>::default();
+
+        keys.press(KeyCode::KeyD);
+        assert_eq!(ControlInput::from_keys(&keys).steer, 1.0);
+
+        keys.release(KeyCode::KeyD);
+        keys.press(KeyCode::KeyA);
+        assert_eq!(ControlInput::from_keys(&keys).steer, -1.0);
+    }
+
+    #[test]
     fn forward_steering_matches_input_direction() {
         let tuning = DrivingTuning::default();
         let surfaces = SurfaceLibrary::default();

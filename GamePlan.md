@@ -615,14 +615,17 @@ Completed recent code changes:
 33. Split imported vehicle scene ownership from the logical car body and moved vehicle selection into a dedicated car asset plugin.
 34. Removed spawned cuboid wheel visuals and per-surface wheel material recoloring.
 35. Added imported wheel node binding by asset `Name` for front wheel steering and wheel spin while keeping contact mechanics independent from imported mesh topology.
+36. Pinned steering semantics with tests: `A`/left is negative steer, `D`/right is positive steer, and positive steer yaws the car right.
+37. Converted gameplay steer into the imported wheel asset axis instead of assuming asset wheel nodes use the same local steering sign as the car controller.
+38. Fixed `Driving -> Setup/MainMenu/Results` pause-menu cleanup by clearing/despawning pause UI on `Driving` exit and removing car-query dependence from non-car pause actions.
 
 Next code changes:
 
-1. Fix `Driving -> Setup` transition cleanup so pause/menu UI and driving scene state cannot leak into setup.
-2. Replace per-segment cuboid rail colliders with path-derived continuous edge collision primitives for curves.
-3. Classify true section boundaries versus internal seams so rails never appear at surface-transition seams.
-4. Add dedicated road/rail primitive validation that compares generated mesh edges, boundary paths, collider spans, and trigger normals for each section.
-5. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
+1. Replace per-segment cuboid rail colliders with path-derived continuous edge collision primitives for curves.
+2. Classify true section boundaries versus internal seams so rails never appear at surface-transition seams.
+3. Add dedicated road/rail primitive validation that compares generated mesh edges, boundary paths, collider spans, and trigger normals for each section.
+4. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
+5. Add a debug-only imported vehicle node inspector if asset wheel names or local axes drift across future car assets.
 6. Add banked track frames after the flat road/rail/contact pipeline is coherent; banking should affect visual road cross-section, contact frame orientation, body roll, and future collider orientation without adding uneven terrain.
 7. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
 8. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
@@ -773,7 +776,7 @@ Procedural assembly has started:
 * Finished runs move to a results screen with retry, next-player, main-menu, quit, and in-memory leaderboard display.
 * Driving model samples four wheel surface contacts and reports them in debug for split-surface drift tuning.
 * First-pass drift assist uses slip state to reduce lateral damping and add controlled yaw assist while sliding.
-* Car visuals use imported vehicle scenes with body roll/pitch, imported wheel-node steering, and wheel spin where asset nodes are exposed.
+* Car visuals use imported vehicle scenes with body roll/pitch, imported wheel-node steering, imported asset-axis conversion, and wheel spin where asset nodes are exposed.
 * In-run HUD shows driver, timer, checkpoint progress, speed, best time, and ghost time; verbose debug is toggled with F3.
 * Grass field, forest, and rocks are placed relative to generated track bounds instead of fixed world coordinates.
 * Track validation now checks empty tracks, missing finish/checkpoint, checkpoint-before-finish order, short pieces, zero-length segments, route yaw bounds, connections, occupied sectors, and generated counts.
