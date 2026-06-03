@@ -31,9 +31,7 @@ pub fn spawn_generated_track(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let pieces = generate_track_pieces(recipe);
-    if let Err(error) = validate_track_pieces(&pieces) {
-        warn!("generated track validation failed: {error}");
-    }
+    validate_track_pieces(&pieces).expect("generated track must validate before spawning");
     let track_bounds = TrackBounds::from_pieces(&pieces);
     let track_info = GeneratedTrackInfo::from_pieces(recipe, &pieces);
     let car_spawn = car_spawn_for(&pieces);

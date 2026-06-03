@@ -55,6 +55,11 @@ pub struct TrackBounds {
 
 impl TrackBounds {
     pub fn from_pieces(pieces: &[TrackPiece]) -> Self {
+        assert!(
+            !pieces.is_empty(),
+            "track bounds require at least one generated piece"
+        );
+
         let mut min = Vec2::splat(f32::INFINITY);
         let mut max = Vec2::splat(f32::NEG_INFINITY);
 
@@ -63,12 +68,10 @@ impl TrackBounds {
             max = max.max(frame.pose.position);
         }
 
-        if !min.is_finite() || !max.is_finite() {
-            return Self {
-                center: Vec2::ZERO,
-                half_extents: Vec2::splat(45.0),
-            };
-        }
+        assert!(
+            min.is_finite() && max.is_finite(),
+            "track bounds require generated path frames"
+        );
 
         let center = (min + max) * 0.5;
         let half_extents = ((max - min) * 0.5) + Vec2::splat(TRACK_WIDTH * 2.5);
@@ -152,14 +155,14 @@ impl TrackPiece {
         self.frames
             .first()
             .map(|frame| frame.pose)
-            .unwrap_or_else(|| Pose2::new(Vec2::ZERO, 0.0))
+            .expect("track pieces require at least one path frame")
     }
 
     pub fn exit(&self) -> Pose2 {
         self.frames
             .last()
             .map(|frame| frame.pose)
-            .unwrap_or_else(|| self.entry())
+            .expect("track pieces require at least one path frame")
     }
 
     pub fn checkpoint_count(pieces: &[Self]) -> usize {
@@ -171,10 +174,10 @@ impl TrackPiece {
 }
 
 pub fn car_spawn_for(pieces: &[TrackPiece]) -> CarSpawn {
-    let Some(first_piece) = pieces.first() else {
-        return CarSpawn::default();
-    };
-    let entry = first_piece.entry();
+    let entry = pieces
+        .first()
+        .expect("car spawn requires at least one generated track piece")
+        .entry();
     let start = entry.position + entry.forward() * 1.1;
 
     CarSpawn {

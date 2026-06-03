@@ -11,11 +11,12 @@ pub fn road_surface_mesh(frames: &[PathFrame], width: f32) -> Mesh {
 
     mesh.fill(0.01, |builder| {
         let points = polygon_points(&polygon);
-        let Some(first) = points.first().copied() else {
-            return;
-        };
+        assert!(
+            points.len() >= 3,
+            "road surface mesh requires a non-degenerate polygon"
+        );
 
-        builder.begin(first);
+        builder.begin(points[0]);
         for point in points.into_iter().skip(1) {
             builder.line_to(point);
         }

@@ -31,7 +31,8 @@ impl VehicleKind {
     pub const fn from_index(index: usize) -> Self {
         match index {
             0 => Self::SportsCar,
-            _ => Self::SportsCar2,
+            1 => Self::SportsCar2,
+            _ => panic!("vehicle index out of range"),
         }
     }
 

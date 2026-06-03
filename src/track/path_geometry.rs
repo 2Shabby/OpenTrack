@@ -24,14 +24,15 @@ pub fn road_edges(frames: &[PathFrame], width: f32) -> RoadEdges {
 }
 
 pub fn road_polygon(frames: &[PathFrame], width: f32) -> BezPath {
+    assert!(
+        !frames.is_empty(),
+        "road polygon requires at least one path frame"
+    );
+
     let edges = road_edges(frames, width);
     let mut path = BezPath::new();
 
-    let Some(first_left) = edges.left.first().copied() else {
-        return path;
-    };
-
-    path.move_to(point(first_left));
+    path.move_to(point(edges.left[0]));
     for left_edge in edges.left.into_iter().skip(1) {
         path.line_to(point(left_edge));
     }
@@ -44,12 +45,14 @@ pub fn road_polygon(frames: &[PathFrame], width: f32) -> BezPath {
 }
 
 pub fn line_path(points: &[Vec2]) -> BezPath {
-    let mut path = BezPath::new();
-    let Some(first) = points.first().copied() else {
-        return path;
-    };
+    assert!(
+        !points.is_empty(),
+        "line path requires at least one generated point"
+    );
 
-    path.move_to(point(first));
+    let mut path = BezPath::new();
+
+    path.move_to(point(points[0]));
     for next_point in points.iter().copied().skip(1) {
         path.line_to(point(next_point));
     }
