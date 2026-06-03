@@ -1,6 +1,6 @@
-use bevy::app::AppExit;
 use bevy::prelude::*;
 
+use super::QuitRequested;
 use super::ui::{self, ButtonSpec};
 use crate::game_state::GameState;
 
@@ -54,7 +54,7 @@ pub(super) fn spawn(mut commands: Commands) {
 
 pub(super) fn handle(
     mut next_state: ResMut<NextState<GameState>>,
-    mut exit: MessageWriter<AppExit>,
+    mut quit: ResMut<QuitRequested>,
     buttons: MenuButtons,
 ) {
     for (interaction, action) in &buttons {
@@ -65,7 +65,7 @@ pub(super) fn handle(
         match action {
             MainMenuAction::StartHotseat => next_state.set(GameState::Setup),
             MainMenuAction::Quit => {
-                exit.write(AppExit::Success);
+                quit.request();
             }
         }
     }

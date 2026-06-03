@@ -4,9 +4,10 @@ use bevy::prelude::*;
 use super::layers::{TRACK_RAIL_LAYER, TRACK_ROAD_LAYER, VEHICLE_LAYER};
 use crate::surface::SurfaceKind;
 
-pub const VEHICLE_COLLISION_LATERAL_HALF_EXTENT: f32 = 0.98;
-pub const VEHICLE_COLLISION_LONGITUDINAL_HALF_EXTENT: f32 = 2.25;
-pub const VEHICLE_COLLISION_HEIGHT: f32 = 0.35;
+pub const VEHICLE_COLLISION_LATERAL_HALF_EXTENT: f32 = 1.08;
+pub const VEHICLE_COLLISION_FRONT_EXTENT: f32 = 2.35;
+pub const VEHICLE_COLLISION_REAR_EXTENT: f32 = 2.85;
+pub const VEHICLE_COLLISION_HEIGHT: f32 = 0.42;
 
 #[derive(Component)]
 pub struct RailCollider;
@@ -20,11 +21,19 @@ pub struct RoadCollider {
 pub struct VehicleCollider;
 
 pub fn vehicle_collider() -> Collider {
-    Collider::cuboid(
-        VEHICLE_COLLISION_LATERAL_HALF_EXTENT * 2.0,
-        VEHICLE_COLLISION_HEIGHT,
-        VEHICLE_COLLISION_LONGITUDINAL_HALF_EXTENT * 2.0,
-    )
+    let longitudinal_half_extent =
+        (VEHICLE_COLLISION_FRONT_EXTENT + VEHICLE_COLLISION_REAR_EXTENT) * 0.5;
+    let rear_bias = (VEHICLE_COLLISION_FRONT_EXTENT - VEHICLE_COLLISION_REAR_EXTENT) * 0.5;
+
+    Collider::compound(vec![(
+        Vec3::new(0.0, 0.0, rear_bias),
+        Quat::IDENTITY,
+        Collider::cuboid(
+            VEHICLE_COLLISION_LATERAL_HALF_EXTENT * 2.0,
+            VEHICLE_COLLISION_HEIGHT,
+            longitudinal_half_extent * 2.0,
+        ),
+    )])
 }
 
 pub fn rail_path_collider(points: &[Vec3], radius: f32) -> Collider {
@@ -90,6 +99,7 @@ mod tests {
         let aabb = collider.aabb(Vec3::ZERO, Quat::IDENTITY);
 
         assert!((aabb.max.x - VEHICLE_COLLISION_LATERAL_HALF_EXTENT).abs() < f32::EPSILON);
-        assert!((aabb.max.z - VEHICLE_COLLISION_LONGITUDINAL_HALF_EXTENT).abs() < f32::EPSILON);
+        assert!((aabb.max.z - VEHICLE_COLLISION_FRONT_EXTENT).abs() < f32::EPSILON);
+        assert!((aabb.min.z + VEHICLE_COLLISION_REAR_EXTENT).abs() < f32::EPSILON);
     }
 }

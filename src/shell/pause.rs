@@ -1,6 +1,6 @@
-use bevy::app::AppExit;
 use bevy::prelude::*;
 
+use super::QuitRequested;
 use super::ui::{self, ButtonSpec};
 use crate::driving::{CarSpawn, PlayerCar};
 use crate::game_state::{GameState, PauseState};
@@ -58,7 +58,7 @@ pub(super) fn handle_menu(
     mut pause: ResMut<PauseState>,
     mut run: ResMut<RunState>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut exit: MessageWriter<AppExit>,
+    mut quit: ResMut<QuitRequested>,
     car_spawn: Res<CarSpawn>,
     mut cars: Query<(&mut Transform, &mut PlayerCar)>,
     buttons: PauseButtons,
@@ -90,7 +90,7 @@ pub(super) fn handle_menu(
                 next_state.set(GameState::MainMenu);
             }
             PauseMenuAction::Quit => {
-                exit.write(AppExit::Success);
+                quit.request();
             }
         }
     }

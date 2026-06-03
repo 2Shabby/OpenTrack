@@ -41,8 +41,8 @@ impl Default for DrivingTuning {
             engine_force: 13_800.0,
             brake_force: 18_500.0,
             reverse_force: 6_500.0,
-            steer_rate: 2.5,
-            min_steer_authority: 0.22,
+            steer_rate: 2.85,
+            min_steer_authority: 0.30,
             max_forward_speed: 58.0,
             max_reverse_speed: 14.0,
             reverse_steering_multiplier: 0.45,
@@ -51,9 +51,9 @@ impl Default for DrivingTuning {
             center_of_gravity_height: 0.42,
             front_weight_bias: 0.54,
             lateral_stiffness: 0.26,
-            drift_yaw_response: 0.035,
-            slide_speed_threshold: 10.0,
-            slide_slip_angle_threshold: 0.48,
+            drift_yaw_response: 0.028,
+            slide_speed_threshold: 12.0,
+            slide_slip_angle_threshold: 0.60,
         }
     }
 }
@@ -449,9 +449,9 @@ fn saturated_handling_state(
 ) -> HandlingState {
     let speed = Vec2::new(basis.forward_speed, basis.lateral_speed).length();
     let slip_trigger = basis.slip_angle() >= tuning.slide_slip_angle_threshold;
-    let breakaway = saturation >= 1.18 || slip_trigger;
+    let breakaway = saturation >= 1.35 || slip_trigger;
     let recovery =
-        saturation < 0.92 && basis.slip_angle() < tuning.slide_slip_angle_threshold * 0.8;
+        saturation < 1.0 && basis.slip_angle() < tuning.slide_slip_angle_threshold * 0.85;
 
     match previous {
         HandlingState::Grip if speed >= tuning.slide_speed_threshold && breakaway => {
@@ -817,6 +817,35 @@ mod tests {
             steering_forces.front_lateral_force.abs() > neutral_forces.front_lateral_force.abs()
         );
         assert!(steering_forces.rear_lateral_force.abs() < neutral_forces.rear_lateral_force.abs());
+    }
+
+    #[test]
+    fn hard_steering_yaws_while_staying_in_grip_on_asphalt() {
+        let tuning = DrivingTuning::default();
+        let surfaces = SurfaceLibrary::default();
+        let surface = surfaces.get(SurfaceKind::Asphalt);
+        let basis = MotionBasis::from_yaw(0.0, Vec3::Z * 22.0);
+        let intent = ControlIntent::from_input(
+            &tuning,
+            ControlInput {
+                throttle: 1.0,
+                steer: 1.0,
+            },
+            &basis,
+            0.42,
+        );
+
+        let forces = tire_forces(
+            &tuning,
+            &surface,
+            intent,
+            &basis,
+            HandlingState::Grip,
+            SurfaceFriction::uniform(1.0, 1.0),
+        );
+
+        assert_eq!(forces.handling_state, HandlingState::Grip);
+        assert!(forces.yaw_delta < 0.0);
     }
 
     #[test]

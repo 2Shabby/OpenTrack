@@ -21,7 +21,6 @@ const BODY_PITCH_RATE: f32 = 0.05;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
 const FRONT_WHEEL_MAX_STEER: f32 = 0.42;
 const ASSET_WHEEL_SPIN_RATE: f32 = 2.0;
-const CAR_COLLISION_SKIN: f32 = 0.02;
 const WHEEL_CONTACT_COUNT: usize = model::WHEEL_COUNT;
 const WHEEL_CONTACT_LABELS: [&str; WHEEL_CONTACT_COUNT] = ["FL", "FR", "RL", "RR"];
 
@@ -74,6 +73,8 @@ impl Plugin for DrivingPlugin {
 #[derive(Component)]
 pub struct PlayerCar {
     pub previous_translation: Vec3,
+    pub last_clear_translation: Vec3,
+    pub last_clear_yaw: f32,
     pub velocity: Vec3,
     pub yaw: f32,
     pub current_surface: SurfaceKind,
@@ -85,6 +86,7 @@ pub struct PlayerCar {
     pub slip_angle: f32,
     pub drive_mode: DriveMode,
     pub handling_state: HandlingState,
+    pub collision_state: CollisionState,
     pub wheel_contacts: WheelContacts,
     pub tire_forces: model::TireForces,
 }
@@ -93,6 +95,8 @@ impl Default for PlayerCar {
     fn default() -> Self {
         Self {
             previous_translation: Vec3::ZERO,
+            last_clear_translation: Vec3::ZERO,
+            last_clear_yaw: 0.0,
             velocity: Vec3::ZERO,
             yaw: 0.0,
             current_surface: SurfaceKind::Asphalt,
@@ -104,6 +108,7 @@ impl Default for PlayerCar {
             slip_angle: 0.0,
             drive_mode: DriveMode::Forward,
             handling_state: HandlingState::Grip,
+            collision_state: CollisionState::Clear,
             wheel_contacts: WheelContacts::default(),
             tire_forces: model::TireForces::default(),
         }
@@ -115,6 +120,8 @@ impl PlayerCar {
         *self = Self::default();
         self.yaw = car_spawn.yaw;
         self.previous_translation = car_spawn.translation;
+        self.last_clear_translation = car_spawn.translation;
+        self.last_clear_yaw = car_spawn.yaw;
         transform.translation = car_spawn.translation;
         transform.rotation = car_spawn.rotation();
     }
@@ -122,6 +129,23 @@ impl PlayerCar {
 
 #[derive(Component)]
 pub struct ChaseCamera;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CollisionState {
+    Clear,
+    SweepHit,
+    PoseOverlap,
+}
+
+impl CollisionState {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Clear => "clear",
+            Self::SweepHit => "sweep",
+            Self::PoseOverlap => "overlap",
+        }
+    }
+}
 
 #[derive(Component)]
 pub struct VehicleSceneRoot;
@@ -230,6 +254,12 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
             car.reset_to_spawn(&mut transform, *ctx.car_spawn);
         }
         car.previous_translation = transform.translation;
+        car.collision_state = CollisionState::Clear;
+        let current_yaw = car.yaw;
+        if !physics.car_overlaps_rail(transform.translation, car.yaw) {
+            car.last_clear_translation = transform.translation;
+            car.last_clear_yaw = car.yaw;
+        }
 
         let input = model::ControlInput::from_keys(&ctx.keys);
         car.throttle = input.throttle;
@@ -258,7 +288,8 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
         );
         car.tire_forces = tire_forces;
         car.handling_state = tire_forces.handling_state;
-        car.yaw += tire_forces.yaw_delta * dt;
+        let desired_yaw = car.yaw + tire_forces.yaw_delta * dt;
+        car.yaw = desired_yaw;
         car.velocity += tire_forces.acceleration * dt;
 
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
@@ -270,22 +301,91 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
         car.velocity = basis.forward * capped_forward_speed + basis.right * capped_lateral_speed;
 
         let current_translation = transform.translation;
-        let mut next_translation = current_translation + car.velocity * dt;
-        if let Some(hit) = physics.cast_car_motion(current_translation, next_translation, car.yaw) {
-            let motion = next_translation - current_translation;
-            let travel = (hit.travel - CAR_COLLISION_SKIN).max(0.0);
-            next_translation = current_translation + motion.normalize_or_zero() * travel;
+        let desired_translation = current_translation + car.velocity * dt;
+        let mut next_yaw = desired_yaw;
+        let resolved_motion =
+            physics.move_car_with_collisions(current_translation, desired_translation, next_yaw);
+        let mut next_translation = resolved_motion.translation;
+        if let Some(hit) = resolved_motion.hit {
             let inward_speed = car.velocity.dot(hit.normal);
             if inward_speed < 0.0 {
-                car.velocity -= hit.normal * inward_speed * 1.35;
-                car.velocity *= 0.78;
+                car.velocity -= hit.normal * inward_speed;
             }
+            car.collision_state = CollisionState::SweepHit;
+        }
+
+        if physics.car_overlaps_rail(next_translation, next_yaw) {
+            let safe_pose = last_clear_car_pose(
+                &physics,
+                current_translation,
+                current_yaw,
+                next_translation,
+                next_yaw,
+                CarPose {
+                    translation: car.last_clear_translation,
+                    yaw: car.last_clear_yaw,
+                },
+            );
+            next_translation = safe_pose.translation;
+            next_yaw = safe_pose.yaw;
+            car.velocity *= 0.45;
+            car.collision_state = CollisionState::PoseOverlap;
         }
 
         next_translation.y = ctx.car_spawn.translation.y;
+        car.yaw = next_yaw;
         transform.translation = next_translation;
         transform.rotation = yaw_rotation(car.yaw);
+        if car.collision_state == CollisionState::Clear
+            && !physics.car_overlaps_rail(transform.translation, car.yaw)
+        {
+            car.last_clear_translation = transform.translation;
+            car.last_clear_yaw = car.yaw;
+        }
     }
+}
+
+#[derive(Clone, Copy)]
+struct CarPose {
+    translation: Vec3,
+    yaw: f32,
+}
+
+fn last_clear_car_pose(
+    physics: &impl TrackPhysicsQueries,
+    start_translation: Vec3,
+    start_yaw: f32,
+    end_translation: Vec3,
+    end_yaw: f32,
+    fallback: CarPose,
+) -> CarPose {
+    if physics.car_overlaps_rail(start_translation, start_yaw) {
+        return fallback;
+    }
+
+    let mut clear = CarPose {
+        translation: start_translation,
+        yaw: start_yaw,
+    };
+    let mut blocked = CarPose {
+        translation: end_translation,
+        yaw: end_yaw,
+    };
+
+    for _ in 0..8 {
+        let midpoint = CarPose {
+            translation: clear.translation.lerp(blocked.translation, 0.5),
+            yaw: clear.yaw + (blocked.yaw - clear.yaw) * 0.5,
+        };
+
+        if physics.car_overlaps_rail(midpoint.translation, midpoint.yaw) {
+            blocked = midpoint;
+        } else {
+            clear = midpoint;
+        }
+    }
+
+    clear
 }
 
 fn update_car_body_visual(
@@ -372,6 +472,7 @@ mod tests {
     use bevy::state::app::StatesPlugin;
 
     use crate::game_state::GameState;
+    use crate::physics::{CarHit, CarMotion};
 
     #[test]
     fn driving_plugin_registers_without_query_conflicts() {
@@ -416,5 +517,80 @@ mod tests {
             Some(AssetWheelRole::Rear)
         );
         assert_eq!(imported_wheel_role("SportsCar_Cube.005"), None);
+    }
+
+    #[test]
+    fn last_clear_car_pose_rewinds_before_pose_overlap() {
+        let physics = BlockingPosePhysics { blocked_x: 6.0 };
+
+        let fallback = CarPose {
+            translation: Vec3::new(-2.0, 0.0, 0.0),
+            yaw: -0.2,
+        };
+        let pose = last_clear_car_pose(
+            &physics,
+            Vec3::ZERO,
+            0.0,
+            Vec3::new(10.0, 0.0, 0.0),
+            1.0,
+            fallback,
+        );
+
+        assert!(pose.translation.x < 6.0);
+        assert!(!physics.car_overlaps_rail(pose.translation, pose.yaw));
+    }
+
+    #[test]
+    fn last_clear_car_pose_restores_fallback_when_current_pose_is_blocked() {
+        let physics = BlockingPosePhysics { blocked_x: 0.0 };
+        let fallback = CarPose {
+            translation: Vec3::new(-4.0, 0.0, 0.0),
+            yaw: -0.3,
+        };
+
+        let pose = last_clear_car_pose(
+            &physics,
+            Vec3::ZERO,
+            0.0,
+            Vec3::new(10.0, 0.0, 0.0),
+            1.0,
+            fallback,
+        );
+
+        assert_eq!(pose.translation, fallback.translation);
+        assert_eq!(pose.yaw, fallback.yaw);
+    }
+
+    struct BlockingPosePhysics {
+        blocked_x: f32,
+    }
+
+    impl TrackPhysicsQueries for BlockingPosePhysics {
+        fn cast_car_motion(&self, _start: Vec3, _end: Vec3, _yaw: f32) -> Option<CarHit> {
+            None
+        }
+
+        fn move_car_with_collisions(
+            &self,
+            _start: Vec3,
+            desired_end: Vec3,
+            _yaw: f32,
+        ) -> CarMotion {
+            CarMotion {
+                translation: desired_end,
+                hit: None,
+            }
+        }
+
+        fn car_overlaps_rail(&self, position: Vec3, _yaw: f32) -> bool {
+            position.x >= self.blocked_x
+        }
+
+        fn ground_at(&self, _position: Vec3) -> GroundContact {
+            GroundContact {
+                source: GroundSource::Road,
+                surface: SurfaceKind::Asphalt,
+            }
+        }
     }
 }

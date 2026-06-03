@@ -5,6 +5,7 @@ mod setup;
 mod ui;
 
 use bevy::prelude::*;
+use bevy::window::{PrimaryWindow, WindowCloseRequested};
 
 use crate::game_state::{GameState, PauseState};
 pub struct ShellPlugin;
@@ -12,6 +13,7 @@ pub struct ShellPlugin;
 impl Plugin for ShellPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PauseState>()
+            .init_resource::<QuitRequested>()
             .init_resource::<SessionSetup>()
             .add_systems(OnEnter(GameState::MainMenu), main_menu::spawn)
             .add_systems(OnEnter(GameState::Setup), setup::spawn)
@@ -40,6 +42,7 @@ impl Plugin for ShellPlugin {
                     .run_if(in_state(GameState::Driving)),
             )
             .add_systems(Update, results::handle.run_if(in_state(GameState::Results)))
+            .add_systems(Update, request_primary_window_close)
             .add_systems(
                 OnExit(GameState::MainMenu),
                 despawn_screen::<main_menu::MainMenuEntity>,
@@ -52,6 +55,36 @@ impl Plugin for ShellPlugin {
                 OnExit(GameState::Results),
                 despawn_screen::<results::ResultsEntity>,
             );
+    }
+}
+
+#[derive(Resource, Default)]
+pub(super) struct QuitRequested {
+    requested: bool,
+}
+
+impl QuitRequested {
+    pub fn request(&mut self) {
+        self.requested = true;
+    }
+}
+
+fn request_primary_window_close(
+    mut quit: ResMut<QuitRequested>,
+    primary_window: Query<Entity, With<PrimaryWindow>>,
+    close_requested: Option<MessageWriter<WindowCloseRequested>>,
+) {
+    if !quit.requested {
+        return;
+    }
+
+    let Some(mut close_requested) = close_requested else {
+        return;
+    };
+
+    if let Ok(window) = primary_window.single() {
+        close_requested.write(WindowCloseRequested { window });
+        quit.requested = false;
     }
 }
 

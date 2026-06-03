@@ -94,7 +94,7 @@ fn update_debug_overlay(
         .unwrap_or_else(|| "none".to_string());
 
     overlay.0.0 = format!(
-        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nhandling: {}\nslip: {:>4.0} deg\nground: {} {}\nwheels: {}\nsplit: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nload all/f/r: {:>5.0}/{:>5.0}/{:>5.0}\nload wheels: {:>4.0}/{:>4.0}/{:>4.0}/{:>4.0}\nfriction: {:>6.0}\nlong force: {:+6.0}\nlat all/f/r: {:+6.0}/{:+6.0}/{:+6.0}\nlat wheels: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\nsat f/r/all: {:.2}/{:.2}/{:.2}\nsat wheels: {:.2}/{:.2}/{:.2}/{:.2}",
+        "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nhandling: {}\ncollision: {}\nslip: {:>4.0} deg\nground: {} {}\nwheels: {}\nsplit: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nload all/f/r: {:>5.0}/{:>5.0}/{:>5.0}\nload wheels: {:>4.0}/{:>4.0}/{:>4.0}/{:>4.0}\nfriction: {:>6.0}\nlong force: {:+6.0}\nlat all/f/r: {:+6.0}/{:+6.0}/{:+6.0}\nlat wheels: {:+5.0}/{:+5.0}/{:+5.0}/{:+5.0}\nsat f/r/all: {:.2}/{:.2}/{:.2}\nsat wheels: {:.2}/{:.2}/{:.2}/{:.2}",
         snapshot.track.seed,
         snapshot.track.piece_count,
         snapshot.track.checkpoint_count,
@@ -116,6 +116,7 @@ fn update_debug_overlay(
         car.signed_speed,
         car.drive_mode.label(),
         car.handling_state.label(),
+        car.collision_state.label(),
         car.slip_angle.to_degrees(),
         car.ground_source.label(),
         car.current_surface.label(),
