@@ -40,7 +40,7 @@ impl GeneratedTrackInfo {
             seed: recipe.seed,
             piece_count: pieces.len(),
             checkpoint_count: TrackPiece::checkpoint_count(pieces),
-            road_surface_count: pieces.iter().map(TrackPiece::segment_count).sum(),
+            road_surface_count: pieces.len(),
             rail_count: pieces.iter().map(TrackPiece::rail_count).sum(),
             trigger_count: TrackPiece::trigger_count(pieces),
         }
@@ -178,7 +178,7 @@ pub fn car_spawn_for(pieces: &[TrackPiece]) -> CarSpawn {
     let start = entry.position + entry.forward() * 1.1;
 
     CarSpawn {
-        translation: Vec3::new(start.x, 0.05, start.y),
+        translation: crate::geometry::xz_translation(start, 0.05),
         yaw: entry.yaw,
     }
 }

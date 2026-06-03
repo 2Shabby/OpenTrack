@@ -14,7 +14,6 @@ pub struct TrackPieceGeometry {
 
 #[derive(Clone, Copy, Debug)]
 pub struct TrackRoadSpan {
-    pub frames: [PathFrame; 2],
     pub surface: SurfaceKind,
     pub bounds: OrientedRect,
     pub length: f32,
@@ -84,7 +83,6 @@ fn road_span(frames: [PathFrame; 2], surface: SurfaceKind) -> TrackRoadSpan {
     );
 
     TrackRoadSpan {
-        frames,
         surface,
         bounds: OrientedRect::new(pose, Vec2::new(TRACK_WIDTH * 0.5, length * 0.5)),
         length,

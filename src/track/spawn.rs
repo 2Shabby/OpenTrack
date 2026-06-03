@@ -15,7 +15,7 @@ use crate::car_asset::sports_car_mesh;
 use crate::driving::{
     CarBodyVisual, CarPaint, CarSpawn, ChaseCamera, PlayerCar, WheelCorner, WheelVisual,
 };
-use crate::geometry::forward_3d;
+use crate::geometry::{forward_3d, xz_translation, yaw_rotation};
 use crate::physics::{
     RailCollider, RoadCollider, rail_collider, rail_collision_layers, road_collider,
     road_collision_layers, static_rigid_body,
@@ -85,8 +85,10 @@ fn spawn_piece(
 
     let geometry = piece.geometry();
 
+    spawn_road_surface(commands, meshes, piece, road_material);
+
     for road in geometry.roads {
-        spawn_road_span(commands, meshes, road, road_material.clone());
+        spawn_road_collider(commands, road);
     }
 
     for rail in geometry.rails {
@@ -96,27 +98,25 @@ fn spawn_piece(
     spawn_trigger(commands, meshes, materials, geometry.trigger);
 }
 
-fn spawn_road_span(
+fn spawn_road_surface(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    road: TrackRoadSpan,
+    piece: &TrackPiece,
     road_material: Handle<StandardMaterial>,
 ) {
     commands.spawn((
-        Mesh3d(meshes.add(road_surface_mesh(&road.frames, TRACK_WIDTH))),
+        Mesh3d(meshes.add(road_surface_mesh(&piece.frames, TRACK_WIDTH))),
         MeshMaterial3d(road_material),
         Transform::default(),
         GeneratedRoadSurface,
         SpawnedSceneEntity,
     ));
+}
 
+fn spawn_road_collider(commands: &mut Commands, road: TrackRoadSpan) {
     commands.spawn((
-        Transform::from_xyz(
-            road.bounds.pose.position.x,
-            -0.04,
-            road.bounds.pose.position.y,
-        )
-        .with_rotation(Quat::from_rotation_y(road.bounds.pose.yaw)),
+        Transform::from_translation(xz_translation(road.bounds.pose.position, -0.04))
+            .with_rotation(yaw_rotation(road.bounds.pose.yaw)),
         RoadCollider {
             surface: road.surface,
         },
@@ -136,12 +136,8 @@ fn spawn_rail_span(
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(RAIL_THICKNESS, RAIL_HEIGHT, rail.length))),
         MeshMaterial3d(rail_material),
-        Transform::from_xyz(
-            rail.bounds.pose.position.x,
-            RAIL_HEIGHT * 0.5,
-            rail.bounds.pose.position.y,
-        )
-        .with_rotation(Quat::from_rotation_y(rail.bounds.pose.yaw)),
+        Transform::from_translation(xz_translation(rail.bounds.pose.position, RAIL_HEIGHT * 0.5))
+            .with_rotation(yaw_rotation(rail.bounds.pose.yaw)),
         RailCollider {
             bounds: rail.bounds,
         },
@@ -177,8 +173,8 @@ fn spawn_trigger(
             emissive: color.into(),
             ..default()
         })),
-        Transform::from_xyz(bounds.pose.position.x, 0.04, bounds.pose.position.y)
-            .with_rotation(Quat::from_rotation_y(bounds.pose.yaw)),
+        Transform::from_translation(xz_translation(bounds.pose.position, 0.04))
+            .with_rotation(yaw_rotation(bounds.pose.yaw)),
         TrackTrigger { kind, bounds },
         GeneratedTrigger,
         SpawnedSceneEntity,
@@ -200,7 +196,7 @@ fn spawn_car(
     });
     commands.spawn((
         Transform::from_translation(car_spawn.translation)
-            .with_rotation(Quat::from_rotation_y(car_spawn.yaw)),
+            .with_rotation(yaw_rotation(car_spawn.yaw)),
         PlayerCar::default(),
         SpawnedPlayer,
         SpawnedSceneEntity,
@@ -210,7 +206,7 @@ fn spawn_car(
         Mesh3d(meshes.add(sports_car_mesh())),
         MeshMaterial3d(body_material),
         Transform::from_translation(car_spawn.translation)
-            .with_rotation(Quat::from_rotation_y(car_spawn.yaw)),
+            .with_rotation(yaw_rotation(car_spawn.yaw)),
         CarBodyVisual,
         SpawnedSceneEntity,
     ));

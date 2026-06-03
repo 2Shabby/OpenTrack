@@ -3,7 +3,7 @@ use bevy::prelude::*;
 
 use super::components::{RailCollider, RoadCollider};
 use super::layers::{rail_query_filter, road_query_filter};
-use crate::geometry::{OrientedRect, rotate_2d};
+use crate::geometry::{OrientedRect, rotate_2d, xz_position, yaw_rotation};
 use crate::surface::SurfaceKind;
 
 const CAR_COLLISION_LATERAL_HALF_EXTENT: f32 = 0.98;
@@ -116,7 +116,7 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
 
     fn cast_car_shape(&self, position: Vec3, yaw: f32, _velocity: Vec3) -> Option<CarHit> {
         let shape = car_collider();
-        let rotation = Quat::from_rotation_y(yaw);
+        let rotation = yaw_rotation(yaw);
         let filter = rail_query_filter();
         let intersections = self
             .spatial_query
@@ -132,10 +132,7 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
 
 impl RailColliderSample {
     fn collide_car(self, position: Vec3) -> Option<CarHit> {
-        let local = self
-            .bounds
-            .pose
-            .world_to_local(Vec2::new(position.x, position.z));
+        let local = self.bounds.pose.world_to_local(xz_position(position));
         let expanded = self.bounds.half_extents
             + Vec2::new(
                 CAR_COLLISION_LATERAL_HALF_EXTENT,

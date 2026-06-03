@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::car_asset::sports_car_mesh;
 use crate::driving::PlayerCar;
 use crate::game_state::{GameState, not_paused};
+use crate::geometry::yaw_rotation;
 use crate::run::{RunState, RunStatus};
 use crate::track::SpawnedSceneEntity;
 
@@ -164,7 +165,7 @@ fn update_ghost_visual(
     };
 
     ghost.0.translation = sample.translation + Vec3::Y * 0.08;
-    ghost.0.rotation = Quat::from_rotation_y(sample.yaw);
+    ghost.0.rotation = yaw_rotation(sample.yaw);
     ghost.1.set_if_neq(Visibility::Visible);
 }
 

@@ -41,7 +41,7 @@ pub fn validate_track_pieces(pieces: &[TrackPiece]) -> Result<(), String> {
         seed: 0,
         piece_count: pieces.len(),
         checkpoint_count: TrackPiece::checkpoint_count(pieces),
-        road_surface_count: pieces.iter().map(TrackPiece::segment_count).sum(),
+        road_surface_count: pieces.len(),
         rail_count: pieces.iter().map(TrackPiece::rail_count).sum(),
         trigger_count: TrackPiece::trigger_count(pieces),
     };

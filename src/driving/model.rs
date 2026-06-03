@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::geometry::{forward_3d, right_3d};
 use crate::surface::SurfaceParams;
 
 #[derive(Resource)]
@@ -106,8 +107,8 @@ pub struct MotionBasis {
 
 impl MotionBasis {
     pub fn from_yaw(yaw: f32, velocity: Vec3) -> Self {
-        let forward = Vec3::new(yaw.sin(), 0.0, yaw.cos());
-        let right = Vec3::new(forward.z, 0.0, -forward.x);
+        let forward = forward_3d(yaw);
+        let right = right_3d(yaw);
 
         Self {
             forward,
@@ -165,7 +166,7 @@ pub fn slide_yaw_assist(
 
     let speed_ratio = (basis.forward_speed / tuning.max_forward_speed).clamp(0.0, 1.0);
 
-    -controls.steer * tuning.slide_yaw_assist_rate * speed_ratio
+    controls.steer * tuning.slide_yaw_assist_rate * speed_ratio
 }
 
 pub fn steering_yaw_delta(
@@ -183,7 +184,7 @@ pub fn steering_yaw_delta(
     } else {
         tuning.steer_rate
     };
-    let direction = if reversing { 1.0 } else { -1.0 };
+    let direction = if reversing { -1.0 } else { 1.0 };
 
     controls.steer * rate * steer_authority * surface.steering_multiplier * direction
 }
@@ -208,5 +209,41 @@ fn axis(positive: bool, negative: bool) -> f32 {
         (true, false) => 1.0,
         (false, true) => -1.0,
         _ => 0.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::surface::{SurfaceKind, SurfaceLibrary};
+
+    #[test]
+    fn forward_steering_matches_input_direction() {
+        let tuning = DrivingTuning::default();
+        let surfaces = SurfaceLibrary::default();
+        let surface = surfaces.get(SurfaceKind::Asphalt);
+        let basis = MotionBasis::from_yaw(0.0, Vec3::Z * 10.0);
+
+        let right = steering_yaw_delta(
+            &tuning,
+            &surface,
+            DriverControls {
+                throttle: 1.0,
+                steer: 1.0,
+            },
+            &basis,
+        );
+        let left = steering_yaw_delta(
+            &tuning,
+            &surface,
+            DriverControls {
+                throttle: 1.0,
+                steer: -1.0,
+            },
+            &basis,
+        );
+
+        assert!(right > 0.0);
+        assert!(left < 0.0);
     }
 }

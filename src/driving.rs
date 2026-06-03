@@ -7,6 +7,7 @@ use bevy::prelude::*;
 pub use model::{DriveMode, DrivingTuning, HandlingState};
 
 use crate::game_state::{GameState, not_paused};
+use crate::geometry::{forward_3d, right_3d, yaw_rotation};
 use crate::physics::{
     AvianTrackPhysicsQueries, GroundContact, GroundSource, RailCollider, RoadCollider,
     TrackPhysicsQueries,
@@ -48,7 +49,7 @@ impl Default for CarSpawn {
 
 impl CarSpawn {
     pub fn rotation(self) -> Quat {
-        Quat::from_rotation_y(self.yaw)
+        yaw_rotation(self.yaw)
     }
 }
 
@@ -304,7 +305,7 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
 
         next_translation.y = ctx.car_spawn.translation.y;
         transform.translation = next_translation;
-        transform.rotation = Quat::from_rotation_y(car.yaw);
+        transform.rotation = yaw_rotation(car.yaw);
     }
 }
 
@@ -335,9 +336,8 @@ fn update_car_body_visual(
     let pitch = car_state.throttle * BODY_PITCH_RATE;
 
     body.translation = car_transform.translation + Vec3::Y * BODY_VISUAL_HEIGHT;
-    body.rotation = Quat::from_rotation_y(car_state.yaw)
-        * Quat::from_rotation_z(roll)
-        * Quat::from_rotation_x(pitch);
+    body.rotation =
+        yaw_rotation(car_state.yaw) * Quat::from_rotation_z(roll) * Quat::from_rotation_x(pitch);
 }
 
 fn update_wheel_visuals(
@@ -347,8 +347,8 @@ fn update_wheel_visuals(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let (car_transform, car_state) = *car;
-    let forward = Vec3::new(car_state.yaw.sin(), 0.0, car_state.yaw.cos());
-    let right = Vec3::new(forward.z, 0.0, -forward.x);
+    let forward = forward_3d(car_state.yaw);
+    let right = right_3d(car_state.yaw);
 
     let spin = time.elapsed_secs_wrapped() * car_state.signed_speed * 2.0;
     for (mut transform, wheel, material) in &mut wheels {
@@ -363,7 +363,7 @@ fn update_wheel_visuals(
 
         transform.translation = car_transform.translation + world_offset;
         transform.rotation =
-            Quat::from_rotation_y(car_state.yaw + steer_angle) * Quat::from_rotation_x(spin);
+            yaw_rotation(car_state.yaw + steer_angle) * Quat::from_rotation_x(spin);
 
         if let Some(material) = materials.get_mut(material) {
             material.base_color = wheel_color(car_state.wheel_contacts.at(wheel.corner));
@@ -388,7 +388,7 @@ fn chase_camera(
 ) {
     let (car_transform, car_state) = *car;
     let speed = car_state.velocity.length();
-    let forward = Vec3::new(car_state.yaw.sin(), 0.0, car_state.yaw.cos());
+    let forward = forward_3d(car_state.yaw);
     let target = car_transform.translation + Vec3::Y * 1.0;
     let desired_position = target - forward * (7.5 + speed * 0.06) + Vec3::Y * 4.2;
     let smoothing = 1.0 - (-8.0 * time.delta_secs()).exp();

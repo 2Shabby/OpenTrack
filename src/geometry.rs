@@ -36,7 +36,7 @@ impl OrientedRect {
     }
 
     pub fn contains_xz(self, position: Vec3) -> bool {
-        self.contains(Vec2::new(position.x, position.z))
+        self.contains(xz_position(position))
     }
 
     pub fn contains(self, position: Vec2) -> bool {
@@ -60,6 +60,23 @@ impl OrientedRect {
 
 pub fn forward_3d(yaw: f32) -> Vec3 {
     Vec3::new(yaw.sin(), 0.0, yaw.cos())
+}
+
+pub fn right_3d(yaw: f32) -> Vec3 {
+    let forward = forward_3d(yaw);
+    Vec3::new(forward.z, 0.0, -forward.x)
+}
+
+pub fn xz_translation(position: Vec2, y: f32) -> Vec3 {
+    Vec3::new(position.x, y, position.y)
+}
+
+pub fn xz_position(position: Vec3) -> Vec2 {
+    Vec2::new(position.x, position.z)
+}
+
+pub fn yaw_rotation(yaw: f32) -> Quat {
+    Quat::from_rotation_y(yaw)
 }
 
 pub fn rotate_2d(value: Vec2, angle: f32) -> Vec2 {
