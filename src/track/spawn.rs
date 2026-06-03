@@ -16,8 +16,9 @@ use crate::car_asset::VehicleSelection;
 use crate::driving::{CarSpawn, ChaseCamera, PlayerCar, VehicleSceneRoot};
 use crate::geometry::{forward_3d, xz_translation, yaw_rotation};
 use crate::physics::{
-    RailCollider, RoadCollider, rail_collision_layers, rail_path_collider, road_collision_layers,
-    road_mesh_collider, static_rigid_body,
+    RailCollider, RoadCollider, VehicleCollider, rail_collision_layers, rail_path_collider,
+    road_collision_layers, road_mesh_collider, static_rigid_body, vehicle_collider,
+    vehicle_collision_layers, vehicle_rigid_body,
 };
 use crate::run::{TrackTrigger, TrackTriggerKind};
 use crate::surface::SurfaceKind;
@@ -268,6 +269,10 @@ fn spawn_car(
         Transform::from_translation(car_spawn.translation)
             .with_rotation(yaw_rotation(car_spawn.yaw)),
         PlayerCar::default(),
+        vehicle_rigid_body(),
+        vehicle_collision_layers(),
+        vehicle_collider(),
+        VehicleCollider,
         SpawnedPlayer,
         SpawnedSceneEntity,
     ));

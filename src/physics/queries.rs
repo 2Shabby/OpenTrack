@@ -1,13 +1,11 @@
-use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery};
+use avian3d::prelude::{ShapeCastConfig, SpatialQuery};
 use bevy::prelude::*;
 
-use super::components::RoadCollider;
+use super::components::{RoadCollider, vehicle_collider};
 use super::layers::{rail_query_filter, road_query_filter};
 use crate::geometry::yaw_rotation;
 use crate::surface::SurfaceKind;
 
-const CAR_COLLISION_LATERAL_HALF_EXTENT: f32 = 0.98;
-const CAR_COLLISION_LONGITUDINAL_HALF_EXTENT: f32 = 2.0;
 const CAR_COLLISION_TARGET_DISTANCE: f32 = 0.03;
 const GROUND_RAY_START_HEIGHT: f32 = 3.0;
 const GROUND_RAY_DISTANCE: f32 = 8.0;
@@ -100,7 +98,7 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
     fn cast_car_motion(&self, start: Vec3, end: Vec3, yaw: f32) -> Option<CarHit> {
         let motion = end - start;
         let (direction, distance) = Dir3::new_and_length(motion).ok()?;
-        let shape = car_collider();
+        let shape = vehicle_collider();
         let rotation = yaw_rotation(yaw);
         let config = ShapeCastConfig::from_max_distance(distance)
             .with_target_distance(CAR_COLLISION_TARGET_DISTANCE);
@@ -115,32 +113,9 @@ impl TrackPhysicsQueries for AvianTrackPhysicsQueries<'_, '_, '_> {
     }
 }
 
-fn car_collider() -> Collider {
-    Collider::cuboid(
-        CAR_COLLISION_LATERAL_HALF_EXTENT * 2.0,
-        0.3,
-        CAR_COLLISION_LONGITUDINAL_HALF_EXTENT * 2.0,
-    )
-}
-
 fn off_track_contact() -> GroundContact {
     GroundContact {
         source: GroundSource::OffTrack,
         surface: SurfaceKind::Grass,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use avian3d::prelude::SimpleCollider;
-
-    #[test]
-    fn car_collider_matches_controller_extents() {
-        let collider = car_collider();
-        let aabb = collider.aabb(Vec3::ZERO, Quat::IDENTITY);
-
-        assert!((aabb.max.x - CAR_COLLISION_LATERAL_HALF_EXTENT).abs() < f32::EPSILON);
-        assert!((aabb.max.z - CAR_COLLISION_LONGITUDINAL_HALF_EXTENT).abs() < f32::EPSILON);
     }
 }
