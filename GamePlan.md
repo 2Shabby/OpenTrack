@@ -601,15 +601,120 @@ Completed recent code changes:
 
 Next code changes:
 
-1. Replace hard-coded candidate lists with piece metadata, connection rules, and candidate weighting.
-2. Audit whether `kurbo` should own future 2D path offset/flattening once road pieces need more than frame-derived polygons.
-3. Add dedicated road/rail primitive validation that compares generated mesh edges, collider spans, and trigger normals for each segment.
-5. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
-6. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
-7. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
-8. Improve setup/results/pause UI polish within the current screen modules instead of rebuilding the shell architecture.
-9. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
-10. Keep player-profile and persistence work deferred until generation and physics-query stability improve.
+1. Fix `Driving -> Setup` transition cleanup so pause/menu UI and driving scene state cannot leak into setup.
+2. Replace per-segment cuboid rails/colliders with path-derived continuous edge primitives for curves.
+3. Remove rails at surface-transition seams unless the section edge is a real track boundary.
+4. Add dedicated road/rail primitive validation that compares generated mesh edges, collider spans, and trigger normals for each section.
+5. Replace hard-coded candidate lists with piece metadata, connection rules, and candidate weighting.
+6. Audit whether `kurbo` should own future 2D path offset/flattening once road pieces need more than frame-derived polygons.
+7. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
+8. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
+9. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
+10. Improve setup/results/pause UI polish within the current screen modules instead of rebuilding the shell architecture.
+11. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
+12. Keep player-profile and persistence work deferred until generation and physics-query stability improve.
+
+## Current Audit: Shell Flow and Curved Track Primitives
+
+### Broken `Driving -> Setup` Flow
+
+Finding:
+
+* Pause UI is spawned from the driving-state update path, but pause cleanup is not currently owned by `OnExit(GameState::Driving)`.
+* Transitioning from gameplay to setup through the pause menu can therefore leave stale pause UI/state around while setup spawns its own UI.
+* This is a lifecycle bug, not a state-design problem. `PauseState` can remain a resource; the cleanup ownership needs to be explicit.
+
+Robust fix:
+
+* Add `OnExit(GameState::Driving)` cleanup for pause-menu entities.
+* Clear `PauseState` when leaving `Driving`, not only when entering it.
+* Add a shell test that drives `MainMenu -> Setup -> Driving -> Setup` and asserts that exactly the setup UI remains.
+
+### Curved Road, Rail, and Collision Audit
+
+Finding:
+
+* Curved roads are now generated and visible, but the barrier/collider model is still segment-cuboid based.
+* `TrackPiece::geometry()` converts every adjacent pair of sampled path frames into an independent road span and then generates two rail spans per road span.
+* That makes rails and rail colliders approximate curves as short boxes. This is passable for visuals at low curvature, but it is not a robust collision model for continuous curved barriers.
+* The current rail collision response is project-owned lateral response against each rail span, so discontinuities between span boxes can cause unstable or missing wall response.
+* Surface changes are currently represented by separate road spans/pieces, and rail generation does not distinguish a true track edge from an internal seam. That is why rails can appear between surface transitions.
+
+Correct layering:
+
+```text
+TrackPath / section plan
+-> road surface polygon
+-> boundary edges
+-> rail visual strips only on boundary edges
+-> rail collision primitives only on boundary edges
+-> surface zones as metadata over road polygons, not barriers
+```
+
+Validator scope:
+
+* validate section connectivity
+* validate occupied sectors
+* validate generated primitive counts
+* validate edge continuity and boundary classification
+* do not reject routes for being boring
+* do not use rail/road rectangle overlap as route planning logic
+
+Generator policy scope:
+
+* candidate ordering
+* turn/straight candidate probability
+* route shape tendencies
+* surface assignment
+
+### Robust Primitive Direction
+
+The next model should stop treating road spans as the owner of rails. Instead:
+
+```text
+TrackSectionGeometry {
+  road_polygon
+  left_boundary
+  right_boundary
+  surface_regions
+  triggers
+}
+```
+
+Then:
+
+* Road mesh comes from `road_polygon`.
+* Road collider comes from the same road polygon or generated mesh.
+* Rails are generated from `left_boundary` and `right_boundary` only.
+* Rail colliders are generated from those same boundary paths.
+* Surface transitions create adjacent or overlaid surface regions, not rail spans.
+
+### Crate Audit Decision
+
+Current crates already cover part of the fix:
+
+* `bevy_procedural_meshes` is still appropriate for road-surface tessellation because it builds Bevy meshes from Lyon-backed 2D fills.
+* Avian should remain the physics backend. It already supports project-owned query adapters and mesh/collider primitives; swapping physics crates is not the first fix.
+
+Likely useful crate addition:
+
+* `kurbo` is the strongest candidate for robust 2D path vocabulary: arcs, Bezier paths, flattening, stroking, offset curves, and path expansion. Its docs expose `Stroke`, path stroking, flattening, and offset modules. Use it if boundary extraction and offset rails become awkward with hand-written sampled-frame math.
+
+Likely not worth adding yet:
+
+* Direct `lyon_tessellation` is probably unnecessary while `bevy_procedural_meshes` already uses Lyon for current mesh generation.
+* `rstar` is still a later optimization for sector/index lookup, not a fix for curved rails/colliders.
+* `bevy_mod_raycast` does not help; Avian owns track physics queries already.
+
+Implementation order:
+
+1. Fix shell transition cleanup.
+2. Introduce boundary extraction from `TrackPath` frames: left edge, right edge, start edge, end edge.
+3. Classify which boundaries receive rails. Adjacent piece seams and surface seams do not get rails.
+4. Generate rail visuals from boundary paths, not from every road span.
+5. Generate rail colliders from the same boundary paths. Start with dense short colliders derived from boundary samples, then replace with a mesh/polyline collider if Avian integration proves stable.
+6. Add primitive validation for boundary continuity and “no rail on internal seam.”
+7. Add `kurbo` only if edge offset/stroking logic starts duplicating path-geometry work.
 
 ## Current Code Slice
 
