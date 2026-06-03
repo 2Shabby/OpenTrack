@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use super::generation::{PathFrame, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece, TrackPieceKind};
-use crate::spatial::{OrientedRect, Pose2};
+use crate::geometry::{OrientedRect, Pose2};
 use crate::surface::SurfaceKind;
 
 #[derive(Clone, Debug)]

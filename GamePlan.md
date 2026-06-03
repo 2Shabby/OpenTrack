@@ -440,7 +440,57 @@ Dependency policy:
 * Pin Bevy exactly enough to avoid accidental ecosystem skew during early development.
 * Add Avian now so the physics-query seam can be designed, but do not let vehicle feel depend on Avian internals.
 * Do not add asset, audio, input abstraction, or editor crates until the driving sandbox has a stable shape.
+* Do not hand-roll road-path and mesh infrastructure indefinitely. Audit Bevy-compatible procedural/path crates before expanding beyond constant-radius arcs.
 * Prefer plain Bevy input at first. Revisit `leafwing-input-manager` only when hotseat bindings or controller profiles become painful.
+
+Current crate audit direction:
+
+* Use Bevy's built-in curve/spline APIs first for centerline representation if they can replace custom arc sampling without fighting track validation.
+* Evaluate `bevy_procedural_meshes 0.18` for road mesh tessellation/extrusion before adding more custom mesh builders.
+* Evaluate `bevy_lookup_curve` for editable tuning curves once handling values move out of hard-coded constants.
+* Avoid KCC-focused crates as vehicle-controller replacements unless the car becomes a kinematic-body problem; current arcade handling still needs a custom yaw/velocity model.
+
+Crate swap audit:
+
+* `bevy::math::cubic_splines` / `bevy::math::curve`: strong candidate for replacing bespoke centerline sampling once track pieces move from constant arcs to spline-authored paths. This should be tried before adding a separate spline crate.
+* `bevy_procedural_meshes 0.18`: strong candidate for replacing custom road mesh tessellation if it can generate stroked/extruded road surfaces from centerline paths with stable UV and collider span alignment.
+* `kurbo`: strong candidate for non-Bevy 2D path vocabulary, arc/Bezier flattening, path simplification, and offset/stroke geometry. Prefer this if Bevy curves are insufficient for validation or offset-curve work.
+* `lyon` / `lyon_tessellation`: strong candidate for robust 2D stroke/fill tessellation. Prefer direct `lyon` only if `bevy_procedural_meshes` is too high-level or cannot preserve the road/collider contract.
+* `rstar`: strong candidate for replacing O(n^2) overlap scans once piece counts grow. It does not replace SAT/geometry correctness, but it should narrow candidate overlap checks efficiently.
+* `bevy_lookup_curve`: useful for tuning/feel curves, not track generation. Add when acceleration/grip/steering/drift values move from constants to data.
+* KCC crates such as `bevy-ichun`/`bevy_ahoy`: not a current vehicle-controller replacement. They solve character movement over collision worlds, while this project needs arcade car yaw/velocity/surface/drift behavior.
+
+Crate audit pass results:
+
+* There is no obvious Bevy crate that replaces the whole generated racing-track problem end to end. The useful crates are lower-level: curve representation, path flattening/stroking, tessellation, spatial indexing, and tuning curves.
+* The current code should therefore keep a small project-owned track contract and replace the most error-prone internals behind it instead of moving generation ownership wholesale to one crate.
+* The first swap should be path representation, not mesh output. If the centerline abstraction is wrong, every mesh/collider/trigger crate integration will inherit that mismatch.
+* Bevy built-in curves are the first candidate because they are already in the engine dependency and match Bevy 0.18.1. Use them to prototype `TrackPath` as sampled frames generated from curve primitives.
+* `kurbo` is the fallback for path vocabulary if Bevy curves do not give enough 2D path operations for road edge offsets, flattening tolerance, or future Bezier/arc authoring.
+* `lyon_tessellation` is the robust low-level tessellation candidate when road surfaces stop being simple strips. It is most valuable for fills/strokes, joins, caps, and non-rectangular future pieces.
+* `bevy_procedural_meshes` is worth a spike because it targets Bevy 0.18 and already depends optionally on `lyon`, but it must prove that it can preserve UVs, normals, collider spans, and trigger alignment better than a direct `lyon` integration.
+* `rstar` should replace broad-phase overlap scanning once generator piece counts or candidate retries grow. It should not replace project geometry correctness; it only narrows which road spans reach SAT validation.
+* `bevy_lookup_curve` belongs in driving/tuning once hard-coded grip, acceleration, steering, and drift values become data. It is not a generation crate.
+* `bevy_mod_raycast` is not useful while Avian already owns physics queries. It targets older Bevy compatibility in its current docs and would duplicate the project-owned Avian query layer.
+* Direct `parry3d` use is not the next step because Avian already wraps collision/query primitives. Revisit only if we need a query Avian cannot expose cleanly.
+
+Crate swap order:
+
+1. Introduce a project-owned `TrackPath` abstraction that produces `PathFrame` samples and can be backed first by current arcs, then by Bevy curves. Done.
+2. Replace constant-arc generation with Bevy curve-backed sampling for the same straight/curve pieces, keeping validation and generated output shape unchanged.
+3. Add a mesh-generation adapter boundary so `road_surface_mesh` can be swapped without changing track spawning.
+4. Spike `bevy_procedural_meshes` against the existing road strip contract. Keep it only if it reduces code and preserves UV/collider/trigger alignment.
+5. If `bevy_procedural_meshes` is too high-level, spike `kurbo + lyon_tessellation` for path flattening, edge construction, and road-surface triangulation.
+6. Add `rstar` broad-phase indexing after generation supports larger routes or if overlap validation starts dominating retries.
+7. Move vehicle feel constants to tuning assets and evaluate `bevy_lookup_curve` for non-linear speed/grip/steering response curves.
+
+Crate reject criteria:
+
+* reject a crate if it forces gameplay code to depend on crate-specific geometry types across module boundaries
+* reject a crate if it cannot preserve deterministic generation from recipe + seed
+* reject a mesh crate if collider spans, rail spans, trigger normals, and visual mesh edges no longer derive from the same source path
+* reject a crate if it increases Bevy version skew or brings in a heavy subsystem for a narrow helper job
+* reject a vehicle/controller crate if it replaces arcade yaw/velocity/drift semantics with character-controller semantics
 
 ## Proposed Code Architecture
 
@@ -448,6 +498,7 @@ Source layout target:
 
 ```text
 src/main.rs
+src/geometry.rs
 src/driving/
 src/surface/
 src/track/
@@ -466,7 +517,7 @@ Early module responsibilities:
 * `driving`: custom car state, input-to-control mapping, fixed-step vehicle update.
 * `surface`: `SurfaceKind`, `SurfaceParams`, lookup from ground hits and triggers.
 * `track`: piece definitions, piece spawning, recipe and seed data.
-* `physics`: project-owned query traits and backend adapter.
+* `physics`: project-owned query traits, collider components/layers, and backend adapter.
 * `run`: timer, checkpoint order, finish state, retry/reset flow.
 * `hotseat`: players, turn order, per-track leaderboard.
 * `ghost`: transform sampling, playback entity spawning, replay serialization.
@@ -537,15 +588,26 @@ Completed recent code changes:
 13. Added static Avian road colliders and Avian-backed ground raycasts for surface lookup.
 14. Added road/rail collision layers and layer-filtered spatial queries.
 15. Added route-level generation checks for checkpoint order, route yaw bounds, adjacent-curve recovery, and curve sample coherence.
+16. Split physics into focused modules for components, layers, and Avian-backed queries.
+17. Renamed `spatial` to `geometry` so shared pose/bounds helpers live under a clearer layer.
+18. Split track generation into route assembly, primitive path generation, shared generation types, and validation modules.
+19. Started a crate swap audit for Bevy curves, procedural mesh generation, path geometry, tessellation, spatial indexing, and tuning curves.
+20. Identified path representation, mesh generation, and spatial broad-phase as the highest-value crate swap points.
+21. Added a `TrackPath` sampling boundary so future Bevy curve or `kurbo` experiments can replace path internals without changing track pieces, meshes, colliders, rails, or triggers.
 
 Next code changes:
 
 1. Replace hard-coded candidate lists with piece metadata, connection rules, and candidate weighting.
-2. Add route-level validation for generated sequence variety and minimum straight recovery distance by speed/difficulty.
-3. Add dedicated road/rail primitive validation that compares generated mesh edges, collider spans, and trigger normals for each segment.
-4. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
-5. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
-6. Keep UI/player/profile/persistence work deferred until generation and physics-query stability improve.
+2. Prototype Bevy curve-based centerlines behind `TrackPath` and compare with current constant-arc path frames.
+3. Add a mesh adapter boundary, then prototype `bevy_procedural_meshes` for road surfaces.
+4. If the mesh crate cannot preserve the track contract, prototype `kurbo`/`lyon_tessellation` instead.
+5. Add route-level validation for generated sequence variety and minimum straight recovery distance by speed/difficulty.
+6. Add dedicated road/rail primitive validation that compares generated mesh edges, collider spans, and trigger normals for each segment.
+7. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
+8. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
+9. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
+10. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
+11. Keep UI/player/profile/persistence work deferred until generation and physics-query stability improve.
 
 ## Current Code Slice
 
@@ -562,12 +624,14 @@ Procedural assembly has started:
 * Generated tracks now include deterministic sampled arc curves.
 * Road colliders and rails are generated per sampled path segment, not per whole piece rectangle.
 * Each path segment now owns road surface bounds and optional rail bounds from one primitive.
-* Track code is split into `track/generation.rs`, `track/spawn.rs`, and `track/scenery.rs`.
+* Track code is split into route generation, piece geometry, mesh spawning, validation, path primitives, shared generation types, and scenery modules.
+* Track path generation now goes through `TrackPath`, which currently samples straight and constant-arc paths into `PathFrame`s and is the intended seam for Bevy curve or `kurbo` replacement.
 * Generated scene entities are tagged by semantic role: environment, scenery, road surface, rail, trigger, player, camera, and lighting.
-* Shared spatial types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
+* Shared geometry types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
 * Road colliders, rail colliders, triggers, and track pieces no longer carry parallel center/yaw/extent conventions.
 * Physics query results, hotseat state, ghost samples, and car reset semantics have been narrowed to the minimum current API.
 * Avian `PhysicsPlugins` are installed through the local physics plugin.
+* Physics code is layered into components, collision layers, and Avian query adapters instead of one large module.
 * Spawned road spans have static Avian cuboid colliders and project-owned `RoadCollider` metadata.
 * Spawned rails have static Avian cuboid colliders and project-owned `RailCollider` metadata.
 * Ground/surface lookup uses Avian downward raycasts filtered to the road collision layer.

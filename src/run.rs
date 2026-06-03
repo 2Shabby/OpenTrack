@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::driving::PlayerCar;
 use crate::game_state::{GameState, not_paused};
-use crate::spatial::OrientedRect;
+use crate::geometry::OrientedRect;
 
 pub struct RunPlugin;
 

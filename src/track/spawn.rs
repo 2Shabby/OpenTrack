@@ -15,12 +15,12 @@ use crate::car_asset::sports_car_mesh;
 use crate::driving::{
     CarBodyVisual, CarPaint, CarSpawn, ChaseCamera, PlayerCar, WheelCorner, WheelVisual,
 };
+use crate::geometry::forward_3d;
 use crate::physics::{
     RailCollider, RoadCollider, rail_collider, rail_collision_layers, road_collider,
     road_collision_layers, static_rigid_body,
 };
 use crate::run::{TrackTrigger, TrackTriggerKind};
-use crate::spatial::forward_3d;
 use crate::surface::SurfaceKind;
 
 pub fn spawn_generated_track(
@@ -119,7 +119,6 @@ fn spawn_road_span(
         .with_rotation(Quat::from_rotation_y(road.bounds.pose.yaw)),
         RoadCollider {
             surface: road.surface,
-            bounds: road.bounds,
         },
         static_rigid_body(),
         road_collision_layers(),

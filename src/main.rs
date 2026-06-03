@@ -2,13 +2,13 @@ mod car_asset;
 mod debug;
 mod driving;
 mod game_state;
+mod geometry;
 mod ghost;
 mod hotseat;
 mod hud;
 mod physics;
 mod run;
 mod shell;
-mod spatial;
 mod surface;
 mod track;
 
