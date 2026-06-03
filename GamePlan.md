@@ -199,28 +199,23 @@ Recent fixes:
 
 ## Pending Work
 
-Driving audit notes:
+Active gameplay:
 
-* `driving.rs` now samples four logical wheel contacts and passes per-wheel friction into the force model.
-* `driving/model.rs` now owns force, yaw, saturation state, per-wheel loads, and steering-aware front/rear lateral demand.
-* `surface.rs` now stores friction/resistance terms; add tune curves only after stable slip and saturation inputs exist.
-* `debug.rs` shows aggregate and axle tire-force values; add a visual force/contact overlay only when runtime tuning needs it.
+* Tune per-surface friction, rolling resistance, drift breakaway/recovery, and lateral stiffness against actual gameplay feel.
+* Add slip-to-force and drift-yaw tune curves only if the current scalar knobs are too coarse.
+* Improve setup/results/pause UI polish inside the current shell modules.
+* Move the fixed shape catalog into piece metadata with connection rules and candidate weighting when generation needs more control.
 
-Highest priority:
+Debug and tuning support:
 
-1. Add tune curves for slip-to-force and drift yaw response once the scalar inputs are stable.
-2. Add a compact debug/tuning UI for tire forces and surface parameters, likely via `bevy_egui`.
-3. Evaluate `bevy_lookup_curve` for tire-force and yaw-response curves before handrolling curve interpolation.
-4. Add a visual wheel-contact and force overlay if the text debug view is not enough for tuning.
-5. Tune per-surface friction, rolling resistance, and drift breakaway values against actual gameplay feel.
+* Add a compact debug/tuning UI for tire forces and surface parameters, likely via `bevy_egui`.
+* Add a visual wheel-contact and force overlay if text debug output is not enough for tuning.
+* Add a debug-only imported vehicle node/axis inspector only if future assets make wheel axes ambiguous.
 
-Next:
+Parked until scope expands:
 
-6. Add a richer debug primitive overlay for wheel contacts, road collider mesh vertices, rail paths, and trigger normals.
-7. Add a debug-only imported vehicle node/axis inspector only if future assets make wheel axes ambiguous.
-8. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
-9. Add banked track frames after the flat road/rail/contact pipeline is coherent.
-10. Add `rstar` broad-phase indexing only if validation performance needs it.
-11. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
-12. Add vertical pieces only after slope/ramp recovery and placement validation exist.
-13. Improve setup/results/pause UI polish inside the current shell modules.
+* Evaluate `bevy_lookup_curve` only when tune curves are actually needed.
+* Add `rstar` only if validation performance needs it.
+* Add banked track frames after the flat road/rail/contact pipeline is coherent.
+* Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
+* Add vertical pieces only after slope/ramp recovery and placement validation exist.

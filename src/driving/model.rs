@@ -50,10 +50,10 @@ impl Default for DrivingTuning {
             track_width: 1.64,
             center_of_gravity_height: 0.42,
             front_weight_bias: 0.54,
-            lateral_stiffness: 0.34,
-            drift_yaw_response: 0.052,
-            slide_speed_threshold: 8.0,
-            slide_slip_angle_threshold: 0.35,
+            lateral_stiffness: 0.26,
+            drift_yaw_response: 0.035,
+            slide_speed_threshold: 10.0,
+            slide_slip_angle_threshold: 0.48,
         }
     }
 }
@@ -449,9 +449,9 @@ fn saturated_handling_state(
 ) -> HandlingState {
     let speed = Vec2::new(basis.forward_speed, basis.lateral_speed).length();
     let slip_trigger = basis.slip_angle() >= tuning.slide_slip_angle_threshold;
-    let breakaway = saturation >= 1.0 || slip_trigger;
+    let breakaway = saturation >= 1.18 || slip_trigger;
     let recovery =
-        saturation < 0.78 && basis.slip_angle() < tuning.slide_slip_angle_threshold * 0.65;
+        saturation < 0.92 && basis.slip_angle() < tuning.slide_slip_angle_threshold * 0.8;
 
     match previous {
         HandlingState::Grip if speed >= tuning.slide_speed_threshold && breakaway => {
