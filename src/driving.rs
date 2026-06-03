@@ -22,6 +22,8 @@ const BODY_PITCH_RATE: f32 = 0.05;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
 const FRONT_WHEEL_MAX_STEER: f32 = 0.42;
 const ASSET_WHEEL_SPIN_RATE: f32 = 2.0;
+const WHEEL_CONTACT_COUNT: usize = 4;
+const WHEEL_CONTACT_LABELS: [&str; WHEEL_CONTACT_COUNT] = ["FL", "FR", "RL", "RR"];
 
 #[derive(Clone, Copy, Resource)]
 pub struct CarSpawn {
@@ -133,10 +135,7 @@ enum AssetWheelRole {
 
 #[derive(Clone, Copy)]
 pub struct WheelContacts {
-    pub front_left: GroundContact,
-    pub front_right: GroundContact,
-    pub rear_left: GroundContact,
-    pub rear_right: GroundContact,
+    contacts: [GroundContact; WHEEL_CONTACT_COUNT],
 }
 
 impl Default for WheelContacts {
@@ -146,47 +145,53 @@ impl Default for WheelContacts {
             surface: SurfaceKind::Asphalt,
         };
         Self {
-            front_left: contact,
-            front_right: contact,
-            rear_left: contact,
-            rear_right: contact,
+            contacts: [contact; WHEEL_CONTACT_COUNT],
         }
     }
 }
 
 impl WheelContacts {
+    fn sample(
+        physics: &impl TrackPhysicsQueries,
+        center: Vec3,
+        basis: &model::MotionBasis,
+    ) -> Self {
+        let front = basis.forward * WHEEL_SAMPLE_HALF_LENGTH;
+        let rear = -basis.forward * WHEEL_SAMPLE_HALF_LENGTH;
+        let left = -basis.right * WHEEL_SAMPLE_HALF_WIDTH;
+        let right = basis.right * WHEEL_SAMPLE_HALF_WIDTH;
+
+        Self {
+            contacts: [
+                physics.ground_at(center + front + left),
+                physics.ground_at(center + front + right),
+                physics.ground_at(center + rear + left),
+                physics.ground_at(center + rear + right),
+            ],
+        }
+    }
+
     pub fn summary(self) -> String {
-        format!(
-            "FL:{} FR:{} RL:{} RR:{}",
-            self.front_left.label(),
-            self.front_right.label(),
-            self.rear_left.label(),
-            self.rear_right.label()
-        )
+        WHEEL_CONTACT_LABELS
+            .iter()
+            .zip(self.contacts)
+            .map(|(label, contact)| format!("{label}:{}", contact.label()))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     pub fn average_lateral_grip(self, surfaces: &SurfaceLibrary) -> f32 {
-        let contacts = [
-            self.front_left,
-            self.front_right,
-            self.rear_left,
-            self.rear_right,
-        ];
-
-        contacts
+        self.contacts
             .iter()
             .map(|contact| surfaces.get(contact.surface).lateral_grip)
             .sum::<f32>()
-            / contacts.len() as f32
+            / self.contacts.len() as f32
     }
 
     pub fn split_surface(self) -> bool {
-        self.front_left.surface != self.front_right.surface
-            || self.front_left.surface != self.rear_left.surface
-            || self.front_left.surface != self.rear_right.surface
-            || self.front_left.source != self.front_right.source
-            || self.front_left.source != self.rear_left.source
-            || self.front_left.source != self.rear_right.source
+        self.contacts[1..]
+            .iter()
+            .any(|contact| *contact != self.contacts[0])
     }
 }
 
@@ -226,7 +231,7 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
 
         let surface = ctx.surfaces.get(car.current_surface);
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
-        car.wheel_contacts = sample_wheel_contacts(&physics, transform.translation, &basis);
+        car.wheel_contacts = WheelContacts::sample(&physics, transform.translation, &basis);
         let contact_lateral_grip = car.wheel_contacts.average_lateral_grip(&ctx.surfaces);
         car.signed_speed = basis.forward_speed;
         car.slip_angle = basis.slip_angle();
@@ -277,24 +282,6 @@ fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCa
         next_translation.y = ctx.car_spawn.translation.y;
         transform.translation = next_translation;
         transform.rotation = yaw_rotation(car.yaw);
-    }
-}
-
-fn sample_wheel_contacts(
-    physics: &impl TrackPhysicsQueries,
-    center: Vec3,
-    basis: &model::MotionBasis,
-) -> WheelContacts {
-    let front = basis.forward * WHEEL_SAMPLE_HALF_LENGTH;
-    let rear = -basis.forward * WHEEL_SAMPLE_HALF_LENGTH;
-    let left = -basis.right * WHEEL_SAMPLE_HALF_WIDTH;
-    let right = basis.right * WHEEL_SAMPLE_HALF_WIDTH;
-
-    WheelContacts {
-        front_left: physics.ground_at(center + front + left),
-        front_right: physics.ground_at(center + front + right),
-        rear_left: physics.ground_at(center + rear + left),
-        rear_right: physics.ground_at(center + rear + right),
     }
 }
 

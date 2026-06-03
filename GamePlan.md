@@ -147,7 +147,7 @@ Working now:
 * Avian-backed ground raycasts and rail collision queries
 * imported SportsCar/SportsCar2 visuals
 * imported wheel-node steering/spin where nodes are present
-* four wheel contact samples affecting lateral grip
+* fixed logical wheel contact samples affecting lateral grip
 * HUD and debug overlay
 * session-only ghosts and leaderboard
 
@@ -160,23 +160,24 @@ Recent fixes:
 * aligned imported wheel visual steering with gameplay steer
 * fixed pause-menu cleanup on `Driving` exit
 * changed shell UI cleanup to despawn root entities only, avoiding duplicate child despawn warnings
+* centralized shell button spawning in a shared shell UI helper
+* collapsed wheel contact storage to one fixed sample array
 
 ## Pending Work
 
 Highest priority:
 
-1. Verify the A/D steering behavior in-game after the visual-axis correction.
-2. Add a debug-only imported vehicle node/axis inspector if wheel behavior is still ambiguous.
-3. Replace per-segment cuboid rail colliders with path-derived continuous edge collision primitives for curves.
-4. Classify true boundaries versus internal seams so rails never appear at surface-transition seams.
-5. Add road/rail primitive validation comparing mesh edges, boundary paths, collider spans, and trigger normals.
+1. Replace per-segment cuboid rail colliders with path-derived continuous edge collision primitives for curves.
+2. Classify true boundaries versus internal seams so rails never appear at surface-transition seams.
+3. Add road/rail primitive validation comparing mesh edges, boundary paths, collider spans, and trigger normals.
+4. Add a debug-only imported vehicle node/axis inspector only if future assets make wheel axes ambiguous.
 
 Next:
 
-6. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
-7. Add banked track frames after the flat road/rail/contact pipeline is coherent.
-8. Add `rstar` broad-phase indexing only if validation performance needs it.
-9. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
-10. Add vertical pieces only after slope/ramp recovery and placement validation exist.
-11. Improve setup/results/pause UI polish inside the current shell modules.
-12. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
+5. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
+6. Add banked track frames after the flat road/rail/contact pipeline is coherent.
+7. Add `rstar` broad-phase indexing only if validation performance needs it.
+8. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
+9. Add vertical pieces only after slope/ramp recovery and placement validation exist.
+10. Improve setup/results/pause UI polish inside the current shell modules.
+11. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
