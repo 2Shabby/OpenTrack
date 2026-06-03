@@ -5,8 +5,6 @@ use super::types::{PIECE_LENGTH, PathFrame, TrackPieceKind, TurnDirection};
 use crate::geometry::{Pose2, rotate_2d};
 
 const CURVE_RADIUS: f32 = 24.0;
-const CURVE_STEPS: usize = 6;
-
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum TrackPath {
     Straight {
@@ -26,18 +24,22 @@ impl TrackPath {
     pub(crate) fn for_piece(entry: Pose2, kind: TrackPieceKind) -> Self {
         match kind {
             TrackPieceKind::Straight | TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish => {
-                Self::Straight {
-                    entry,
-                    length: PIECE_LENGTH,
-                }
+                Self::straight(entry)
             }
-            TrackPieceKind::Curve(direction) => Self::ConstantArc {
+            TrackPieceKind::Turn { direction, angle } => Self::ConstantArc {
                 entry,
                 direction,
                 radius: CURVE_RADIUS,
-                angle: CURVE_ANGLE,
-                steps: CURVE_STEPS,
+                angle: angle.radians(),
+                steps: angle.sample_steps(),
             },
+        }
+    }
+
+    fn straight(entry: Pose2) -> Self {
+        Self::Straight {
+            entry,
+            length: PIECE_LENGTH,
         }
     }
 
@@ -102,5 +104,3 @@ fn sample_pose_curve(curve: &impl Curve<Pose2>, steps: usize) -> Vec<PathFrame> 
         })
         .collect()
 }
-
-const CURVE_ANGLE: f32 = std::f32::consts::FRAC_PI_4;

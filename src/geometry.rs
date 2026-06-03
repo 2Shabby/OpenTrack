@@ -44,6 +44,18 @@ impl OrientedRect {
 
         local.x.abs() <= self.half_extents.x && local.y.abs() <= self.half_extents.y
     }
+
+    pub fn corners(self) -> [Vec2; 4] {
+        let right = self.pose.right() * self.half_extents.x;
+        let forward = self.pose.forward() * self.half_extents.y;
+
+        [
+            self.pose.position - right - forward,
+            self.pose.position + right - forward,
+            self.pose.position + right + forward,
+            self.pose.position - right + forward,
+        ]
+    }
 }
 
 pub fn forward_3d(yaw: f32) -> Vec3 {

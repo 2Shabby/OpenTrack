@@ -234,6 +234,8 @@ trigger/checkpoint data
 Curved piece authoring direction:
 
 * stop treating curves as rotated rectangles
+* keep shape and surface separate: shape owns path/space/connection, surface only owns handling/material
+* keep the initial generated shape set fixed: straight, 45-degree turn, 90-degree turn, 180-degree turn, each mirrored left/right where applicable
 * define a centerline/path first, then derive all other geometry from it
 * sample the centerline at fixed arc-length intervals
 * build road mesh vertices from sampled tangent/right vectors and track width
@@ -241,6 +243,7 @@ Curved piece authoring direction:
 * build surface/collision zones from the same samples or segment rectangles
 * place checkpoint/finish trigger lines perpendicular to the sampled tangent
 * validate by checking adjacent samples, edge continuity, rail continuity, and trigger alignment
+* validate occupied road footprint sectors, not only centerline sample sectors
 
 Initial curve implementation should use constant-curvature arcs or short sampled splines before clothoids. Clothoid-style transitions are a later quality upgrade for smoother high-speed turns, not a prerequisite for the first correct curve pieces.
 
@@ -545,7 +548,7 @@ Implemented systems:
 * Data-driven surfaces: asphalt, dirt, ice, boost.
 * Project-owned physics-query boundary for ground/surface and rail collision.
 * Deterministic modular track generation from seed and length.
-* Straight and sampled constant-curvature curve pieces.
+* Fixed generated shape pieces: straight, 45-degree turn, 90-degree turn, and 180-degree turn, with surfaces assigned independently.
 * Modular track piece spawning with generated road meshes, rails, checkpoint triggers, and finish triggers.
 * Track validation for finish count, checkpoint-before-finish order, piece frame counts, segment lengths, rail counts, trigger alignment, route yaw bounds, sector occupancy, and piece continuity.
 * Session timer, checkpoint progress, restart, hotseat players, in-memory leaderboard, and session-only ghost replay.
@@ -600,6 +603,8 @@ Completed recent code changes:
 28. Moved overlap fitting to planner-owned occupied sectors instead of low-level road rectangle SAT checks.
 29. Removed silent alternate track generation; planner failure is explicit during development.
 30. Added `kurbo` as the shared 2D path layer for road polygons, boundary extraction, and rail span derivation from boundary paths.
+31. Split generated piece shape from surface assignment and replaced the generic curve piece with fixed 45/90/180-degree turn shapes.
+32. Changed planner occupancy to use road footprint sectors from generated road spans instead of centerline sample cells, fixing valid-looking overlapping tracks.
 
 Next code changes:
 
@@ -607,7 +612,7 @@ Next code changes:
 2. Replace per-segment cuboid rail colliders with path-derived continuous edge collision primitives for curves.
 3. Classify true section boundaries versus internal seams so rails never appear at surface-transition seams.
 4. Add dedicated road/rail primitive validation that compares generated mesh edges, boundary paths, collider spans, and trigger normals for each section.
-5. Replace hard-coded candidate lists with piece metadata, connection rules, and candidate weighting.
+5. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
 6. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
 7. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
 8. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
@@ -723,10 +728,10 @@ Procedural assembly has started:
 * Surfaces are assigned by deterministic RNG.
 * Road colliders, rail colliders, and checkpoint/finish triggers now use oriented bounds.
 * Track generation now stores explicit entry/exit transforms per piece to keep adjacent pieces and lines aligned.
-* Track generation plans pieces with occupied sectors and bounded backtracking before emitting geometry.
+* Track generation plans pieces with occupied road-footprint sectors and bounded backtracking before emitting geometry.
 * Straight pieces now derive center pose, length, road bounds, rails, and road colliders from entry/exit centerline frames.
 * Road surface visuals are generated as meshes from path frames instead of spawned as rotated plane primitives.
-* Generated tracks now include deterministic sampled arc curves.
+* Generated tracks now include deterministic sampled 45/90/180-degree constant-arc turns.
 * Road colliders and rails are generated per sampled path segment, not per whole piece rectangle.
 * Each path segment now owns road surface bounds and optional rail bounds from one primitive.
 * Track code is split into route generation, piece geometry, mesh spawning, validation, path primitives, shared generation types, and scenery modules.
@@ -767,7 +772,7 @@ Procedural assembly has started:
 * Setup recipe controls now expose one generation mode: player count, seed, length, and car color.
 * `track/piece.rs` now exposes one piece geometry contract for road spans, rail spans, and checkpoint/finish trigger lines.
 * Track spawning and validation now consume the same generated piece geometry instead of rebuilding road, rail, and trigger bounds separately.
-* Curves are now explicit generated piece kinds instead of straight pieces with curved frames, and the generator tries curve candidates before straights when sectors fit.
+* Turns are now explicit generated piece shapes instead of one generic curve kind, and the generator tries fixed turn candidates before straights when footprint sectors fit.
 * Pause flow now supports resume, restart, setup, main menu, and quit with run state reset on scene exits.
 * Ground queries now distinguish road/off-track source from handling surface through Avian road raycasts; HUD/debug show both instead of treating lookup misses as just another road surface.
 
@@ -781,9 +786,9 @@ Current shell flow is prototype-complete for the local session loop, and the cod
 
 Pending:
 
-* expand the piece-library contract with piece metadata and connection rules
-* expand generated piece sequences beyond straight, curve, checkpoint, and finish pieces
-* improve curve piece variety and primitive validation beyond constant-radius arcs
+* move the fixed straight/45/90/180 shape catalog into piece metadata and connection rules
+* keep generated shape and surface assignment separate as future pieces are added
+* improve turn primitive validation beyond constant-radius arcs only when the fixed vocabulary is stable
 * checkpoint and finish line placement for every future piece type
 * add metadata-driven connection rules and candidate weighting
 * add unreachable-finish validation once routes become more complex

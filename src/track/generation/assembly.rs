@@ -4,8 +4,10 @@ use rand_chacha::ChaCha8Rng;
 use std::collections::HashSet;
 
 use super::path::generated_frames;
-use super::types::{PIECE_LENGTH, TrackPiece, TrackPieceKind, TrackRecipe, TurnDirection};
-use super::validation::{candidate_is_valid, occupied_cells};
+use super::types::{
+    PIECE_LENGTH, TrackPiece, TrackPieceKind, TrackRecipe, TurnAngle, TurnDirection,
+};
+use super::validation::{candidate_is_valid, occupied_cells_for_fit};
 use crate::geometry::Pose2;
 use crate::surface::SurfaceKind;
 
@@ -48,14 +50,14 @@ fn plan_track(
         }
 
         if let Some(piece) = step.piece.take() {
-            for cell in occupied_cells(&piece) {
+            for cell in occupied_cells_for_fit(&piece) {
                 occupied.remove(&cell);
             }
         }
 
         if let Some(piece) = step.next_fit(&occupied, rng) {
             let next_entry = piece.exit();
-            for cell in occupied_cells(&piece) {
+            for cell in occupied_cells_for_fit(&piece) {
                 occupied.insert(cell);
             }
             step.piece = Some(piece);
@@ -136,17 +138,45 @@ fn piece_kind_candidates(
         return vec![required];
     }
 
-    let primary = curve_direction(entry.yaw, rng);
+    let primary = turn_direction(entry.yaw, rng);
     let secondary = match primary {
         TurnDirection::Left => TurnDirection::Right,
         TurnDirection::Right => TurnDirection::Left,
     };
 
-    vec![
-        TrackPieceKind::Curve(primary),
-        TrackPieceKind::Straight,
-        TrackPieceKind::Curve(secondary),
-    ]
+    let mut turns = [
+        TrackPieceKind::Turn {
+            direction: primary,
+            angle: TurnAngle::Deg45,
+        },
+        TrackPieceKind::Turn {
+            direction: primary,
+            angle: TurnAngle::Deg90,
+        },
+        TrackPieceKind::Turn {
+            direction: secondary,
+            angle: TurnAngle::Deg45,
+        },
+        TrackPieceKind::Turn {
+            direction: secondary,
+            angle: TurnAngle::Deg90,
+        },
+        TrackPieceKind::Turn {
+            direction: primary,
+            angle: TurnAngle::Deg180,
+        },
+        TrackPieceKind::Turn {
+            direction: secondary,
+            angle: TurnAngle::Deg180,
+        },
+    ];
+    let rotation = rng.random_range(0..turns.len());
+    turns.rotate_left(rotation);
+
+    let mut candidates = Vec::with_capacity(turns.len() + 1);
+    candidates.extend(turns);
+    candidates.push(TrackPieceKind::Straight);
+    candidates
 }
 
 fn required_piece_kind(
@@ -163,7 +193,7 @@ fn required_piece_kind(
     }
 }
 
-fn curve_direction(route_yaw: f32, rng: &mut ChaCha8Rng) -> TurnDirection {
+fn turn_direction(route_yaw: f32, rng: &mut ChaCha8Rng) -> TurnDirection {
     if route_yaw > 0.2 {
         return TurnDirection::Left;
     }

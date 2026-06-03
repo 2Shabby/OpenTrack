@@ -87,9 +87,37 @@ impl TrackBounds {
 #[derive(Clone, Copy, Debug)]
 pub enum TrackPieceKind {
     Straight,
-    Curve(TurnDirection),
+    Turn {
+        direction: TurnDirection,
+        angle: TurnAngle,
+    },
     Checkpoint(usize),
     Finish,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TurnAngle {
+    Deg45,
+    Deg90,
+    Deg180,
+}
+
+impl TurnAngle {
+    pub(crate) fn radians(self) -> f32 {
+        match self {
+            Self::Deg45 => std::f32::consts::FRAC_PI_4,
+            Self::Deg90 => std::f32::consts::FRAC_PI_2,
+            Self::Deg180 => std::f32::consts::PI,
+        }
+    }
+
+    pub(crate) fn sample_steps(self) -> usize {
+        match self {
+            Self::Deg45 => 6,
+            Self::Deg90 => 10,
+            Self::Deg180 => 18,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,8 +1,8 @@
-use super::types::{GeneratedTrackInfo, TrackPiece, TrackPieceKind};
+use super::types::{GeneratedTrackInfo, RAIL_THICKNESS, TRACK_WIDTH, TrackPiece, TrackPieceKind};
 use std::collections::HashSet;
 
 const MAX_ROUTE_YAW: f32 = std::f32::consts::PI * 0.85;
-const OCCUPANCY_CELL_SIZE: f32 = 10.0;
+const OCCUPANCY_CELL_SIZE: f32 = 6.0;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct OccupancyCell {
@@ -110,7 +110,7 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
 
     if let Some(trigger) = geometry.trigger {
         let expected_pose = match piece.kind {
-            TrackPieceKind::Straight | TrackPieceKind::Curve(_) => piece.entry(),
+            TrackPieceKind::Straight | TrackPieceKind::Turn { .. } => piece.entry(),
             TrackPieceKind::Checkpoint(_) => piece.entry(),
             TrackPieceKind::Finish => piece.exit(),
         };
@@ -138,7 +138,7 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
                 ));
             }
         }
-        TrackPieceKind::Curve(_) => {
+        TrackPieceKind::Turn { .. } => {
             if piece.frames.len() < 3 {
                 return Err(format!(
                     "piece {index} has {} curve frames, expected at least 3",
@@ -262,29 +262,76 @@ fn validate_route_rules(pieces: &[TrackPiece]) -> Result<(), String> {
 }
 
 pub(crate) fn occupied_cells(piece: &TrackPiece) -> Vec<OccupancyCell> {
-    let mut cells = Vec::with_capacity(piece.frames.len());
-    for frame in &piece.frames {
-        let cell = OccupancyCell::from_position(frame.pose.position);
-        if cells.last().copied() != Some(cell) {
-            cells.push(cell);
+    let mut cells = Vec::new();
+    for road in piece.geometry().roads {
+        for cell in OccupancyCell::from_bounds(road.bounds.corners()) {
+            if road.bounds.contains(cell.center()) && !cells.contains(&cell) {
+                cells.push(cell);
+            }
         }
     }
     cells
 }
 
-fn occupied_cells_for_fit(piece: &TrackPiece) -> impl Iterator<Item = OccupancyCell> + '_ {
-    let entry = OccupancyCell::from_position(piece.entry().position);
+pub(crate) fn occupied_cells_for_fit(
+    piece: &TrackPiece,
+) -> impl Iterator<Item = OccupancyCell> + '_ {
+    let seam_cells = OccupancyCell::from_entry_seam(piece.entry());
     occupied_cells(piece)
         .into_iter()
-        .filter(move |cell| *cell != entry)
+        .filter(move |cell| !seam_cells.contains(cell))
 }
 
 impl OccupancyCell {
+    fn from_bounds(corners: [bevy::prelude::Vec2; 4]) -> Vec<Self> {
+        let mut min = bevy::prelude::Vec2::splat(f32::INFINITY);
+        let mut max = bevy::prelude::Vec2::splat(f32::NEG_INFINITY);
+
+        for corner in corners {
+            min = min.min(corner);
+            max = max.max(corner);
+        }
+
+        let min_cell = Self::from_position(min);
+        let max_cell = Self::from_position(max);
+        let mut cells = Vec::new();
+
+        for x in min_cell.x..=max_cell.x {
+            for y in min_cell.y..=max_cell.y {
+                cells.push(Self { x, y });
+            }
+        }
+
+        cells
+    }
+
+    fn from_entry_seam(entry: crate::geometry::Pose2) -> HashSet<Self> {
+        let seam_half_width = TRACK_WIDTH * 0.5 + RAIL_THICKNESS;
+        let seam_half_depth = OCCUPANCY_CELL_SIZE * 0.5;
+        let forward = entry.forward();
+        let right = entry.right();
+        let corners = [
+            entry.position - right * seam_half_width - forward * seam_half_depth,
+            entry.position + right * seam_half_width - forward * seam_half_depth,
+            entry.position + right * seam_half_width + forward * seam_half_depth,
+            entry.position - right * seam_half_width + forward * seam_half_depth,
+        ];
+
+        Self::from_bounds(corners).into_iter().collect()
+    }
+
     fn from_position(position: bevy::prelude::Vec2) -> Self {
         Self {
             x: (position.x / OCCUPANCY_CELL_SIZE).floor() as i32,
             y: (position.y / OCCUPANCY_CELL_SIZE).floor() as i32,
         }
+    }
+
+    fn center(self) -> bevy::prelude::Vec2 {
+        bevy::prelude::Vec2::new(
+            (self.x as f32 + 0.5) * OCCUPANCY_CELL_SIZE,
+            (self.y as f32 + 0.5) * OCCUPANCY_CELL_SIZE,
+        )
     }
 }
 
@@ -296,7 +343,7 @@ mod tests {
 
     use super::super::assembly::generate_track_pieces;
     use super::super::path::TrackPath;
-    use super::super::types::{TrackRecipe, TurnDirection};
+    use super::super::types::{TrackRecipe, TurnAngle, TurnDirection};
 
     #[test]
     fn generated_tracks_validate_across_seed_range() {
@@ -325,8 +372,8 @@ mod tests {
             assert!(
                 pieces
                     .iter()
-                    .any(|piece| matches!(piece.kind, TrackPieceKind::Curve(_))),
-                "seed {seed} generated no curve pieces"
+                    .any(|piece| matches!(piece.kind, TrackPieceKind::Turn { .. })),
+                "seed {seed} generated no turn pieces"
             );
         }
     }
@@ -358,19 +405,34 @@ mod tests {
     }
 
     #[test]
-    fn route_validation_allows_adjacent_curves_when_connected() {
+    fn route_validation_allows_adjacent_turns_when_connected_and_non_overlapping() {
         let first = TrackPiece {
-            kind: TrackPieceKind::Curve(TurnDirection::Right),
+            kind: TrackPieceKind::Turn {
+                direction: TurnDirection::Right,
+                angle: TurnAngle::Deg45,
+            },
             surface: SurfaceKind::Asphalt,
             frames: test_frames(
                 Pose2::new(bevy::prelude::Vec2::ZERO, 0.0),
-                TrackPieceKind::Curve(TurnDirection::Right),
+                TrackPieceKind::Turn {
+                    direction: TurnDirection::Right,
+                    angle: TurnAngle::Deg45,
+                },
             ),
         };
         let second = TrackPiece {
-            kind: TrackPieceKind::Curve(TurnDirection::Left),
+            kind: TrackPieceKind::Turn {
+                direction: TurnDirection::Right,
+                angle: TurnAngle::Deg45,
+            },
             surface: SurfaceKind::Asphalt,
-            frames: test_frames(first.exit(), TrackPieceKind::Curve(TurnDirection::Left)),
+            frames: test_frames(
+                first.exit(),
+                TrackPieceKind::Turn {
+                    direction: TurnDirection::Right,
+                    angle: TurnAngle::Deg45,
+                },
+            ),
         };
         let checkpoint = TrackPiece {
             kind: TrackPieceKind::Checkpoint(0),
