@@ -20,6 +20,7 @@ const WHEEL_SAMPLE_HALF_LENGTH: f32 = 1.72;
 const BODY_ROLL_RATE: f32 = 0.18;
 const BODY_PITCH_RATE: f32 = 0.05;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
+const FRONT_WHEEL_MAX_STEER: f32 = 0.42;
 
 type WheelVisualQuery<'w, 's> = Query<
     'w,
@@ -355,11 +356,7 @@ fn update_wheel_visuals(
         let world_offset = right * wheel.local_offset.x
             + Vec3::Y * wheel.local_offset.y
             + forward * wheel.local_offset.z;
-        let steer_angle = if wheel.front {
-            car_state.steer * 0.42
-        } else {
-            0.0
-        };
+        let steer_angle = front_wheel_visual_steer(car_state.steer, wheel.front);
 
         transform.translation = car_transform.translation + world_offset;
         transform.rotation =
@@ -368,6 +365,14 @@ fn update_wheel_visuals(
         if let Some(material) = materials.get_mut(material) {
             material.base_color = wheel_color(car_state.wheel_contacts.at(wheel.corner));
         }
+    }
+}
+
+fn front_wheel_visual_steer(steer: f32, front: bool) -> f32 {
+    if front {
+        -steer * FRONT_WHEEL_MAX_STEER
+    } else {
+        0.0
     }
 }
 
@@ -412,5 +417,12 @@ mod tests {
         app.add_plugins(DrivingPlugin);
 
         app.update();
+    }
+
+    #[test]
+    fn front_wheel_visuals_use_mesh_local_steer_direction() {
+        assert!(front_wheel_visual_steer(1.0, true) < 0.0);
+        assert!(front_wheel_visual_steer(-1.0, true) > 0.0);
+        assert_eq!(front_wheel_visual_steer(1.0, false), 0.0);
     }
 }
