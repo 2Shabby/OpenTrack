@@ -7,7 +7,7 @@ use bevy::prelude::*;
 pub use model::{DriveMode, DrivingTuning, HandlingState};
 
 use crate::game_state::{GameState, not_paused};
-use crate::geometry::{forward_3d, right_3d, yaw_rotation};
+use crate::geometry::{forward_3d, yaw_rotation};
 use crate::physics::{
     AvianTrackPhysicsQueries, GroundContact, GroundSource, RailCollider, RoadCollider,
     TrackPhysicsQueries,
@@ -21,17 +21,7 @@ const BODY_ROLL_RATE: f32 = 0.18;
 const BODY_PITCH_RATE: f32 = 0.05;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
 const FRONT_WHEEL_MAX_STEER: f32 = 0.42;
-
-type ContactWheelVisualQuery<'w, 's> = Query<
-    'w,
-    's,
-    (
-        &'static mut Transform,
-        &'static ContactWheelVisual,
-        &'static MeshMaterial3d<StandardMaterial>,
-    ),
-    (With<ContactWheelVisual>, Without<PlayerCar>),
->;
+const ASSET_WHEEL_SPIN_RATE: f32 = 2.0;
 
 #[derive(Clone, Copy, Resource)]
 pub struct CarSpawn {
@@ -66,7 +56,12 @@ impl Plugin for DrivingPlugin {
             )
             .add_systems(
                 Update,
-                (update_car_body_visual, update_wheel_visuals, chase_camera)
+                (
+                    update_car_body_visual,
+                    bind_imported_vehicle_wheels,
+                    update_imported_wheel_visuals,
+                    chase_camera,
+                )
                     .chain()
                     .after(drive_car)
                     .run_if(in_state(GameState::Driving).and(not_paused)),
@@ -125,18 +120,9 @@ pub struct ChaseCamera;
 pub struct VehicleSceneRoot;
 
 #[derive(Component)]
-pub struct ContactWheelVisual {
-    pub local_offset: Vec3,
+pub struct AssetWheelVisual {
+    base_rotation: Quat,
     pub front: bool,
-    pub corner: WheelCorner,
-}
-
-#[derive(Clone, Copy)]
-pub enum WheelCorner {
-    FrontLeft,
-    FrontRight,
-    RearLeft,
-    RearRight,
 }
 
 #[derive(Clone, Copy)]
@@ -195,15 +181,6 @@ impl WheelContacts {
             || self.front_left.source != self.front_right.source
             || self.front_left.source != self.rear_left.source
             || self.front_left.source != self.rear_right.source
-    }
-
-    pub fn at(self, corner: WheelCorner) -> SurfaceKind {
-        match corner {
-            WheelCorner::FrontLeft => self.front_left.surface,
-            WheelCorner::FrontRight => self.front_right.surface,
-            WheelCorner::RearLeft => self.rear_left.surface,
-            WheelCorner::RearRight => self.rear_right.surface,
-        }
     }
 }
 
@@ -328,29 +305,31 @@ fn update_car_body_visual(
         yaw_rotation(car_state.yaw) * Quat::from_rotation_z(roll) * Quat::from_rotation_x(pitch);
 }
 
-fn update_wheel_visuals(
-    time: Res<Time>,
-    car: Single<(&Transform, &PlayerCar)>,
-    mut wheels: ContactWheelVisualQuery,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+fn bind_imported_vehicle_wheels(
+    mut commands: Commands,
+    wheels: Query<(Entity, &Name, &Transform), Without<AssetWheelVisual>>,
 ) {
-    let (car_transform, car_state) = *car;
-    let forward = forward_3d(car_state.yaw);
-    let right = right_3d(car_state.yaw);
+    for (entity, name, transform) in &wheels {
+        let Some(front) = imported_wheel_role(name.as_str()) else {
+            continue;
+        };
 
-    let spin = time.elapsed_secs_wrapped() * car_state.signed_speed * 2.0;
-    for (mut transform, wheel, material) in &mut wheels {
-        let world_offset = right * wheel.local_offset.x
-            + Vec3::Y * wheel.local_offset.y
-            + forward * wheel.local_offset.z;
-        let steer_angle = front_wheel_visual_steer(car_state.wheel_steer_angle, wheel.front);
+        commands.entity(entity).insert(AssetWheelVisual {
+            base_rotation: transform.rotation,
+            front,
+        });
+    }
+}
 
-        transform.translation = car_transform.translation + world_offset;
-        transform.rotation = contact_wheel_rotation(car_state.yaw, steer_angle, spin);
-
-        if let Some(material) = materials.get_mut(material) {
-            material.base_color = wheel_color(car_state.wheel_contacts.at(wheel.corner));
-        }
+fn update_imported_wheel_visuals(
+    time: Res<Time>,
+    car: Single<&PlayerCar>,
+    mut wheels: Query<(&mut Transform, &AssetWheelVisual), Without<PlayerCar>>,
+) {
+    let spin = time.elapsed_secs_wrapped() * car.signed_speed * ASSET_WHEEL_SPIN_RATE;
+    for (mut transform, wheel) in &mut wheels {
+        let steer_angle = front_wheel_visual_steer(car.wheel_steer_angle, wheel.front);
+        transform.rotation = asset_wheel_rotation(wheel.base_rotation, steer_angle, spin);
     }
 }
 
@@ -358,17 +337,17 @@ fn front_wheel_visual_steer(wheel_steer_angle: f32, front: bool) -> f32 {
     if front { wheel_steer_angle } else { 0.0 }
 }
 
-fn contact_wheel_rotation(car_yaw: f32, steer_angle: f32, spin: f32) -> Quat {
-    yaw_rotation(car_yaw + steer_angle) * Quat::from_rotation_x(spin)
+fn asset_wheel_rotation(base_rotation: Quat, steer_angle: f32, spin: f32) -> Quat {
+    base_rotation * Quat::from_rotation_y(steer_angle) * Quat::from_rotation_x(spin)
 }
 
-fn wheel_color(surface: SurfaceKind) -> Color {
-    match surface {
-        SurfaceKind::Grass => Color::srgb(0.13, 0.35, 0.09),
-        SurfaceKind::Ice => Color::srgb(0.45, 0.75, 0.82),
-        SurfaceKind::Boost => Color::srgb(0.85, 0.54, 0.05),
-        SurfaceKind::Dirt => Color::srgb(0.34, 0.2, 0.1),
-        SurfaceKind::Asphalt => Color::srgb(0.02, 0.02, 0.018),
+fn imported_wheel_role(name: &str) -> Option<bool> {
+    if name.contains("FrontLeftWheel") || name.contains("FrontRightWheel") {
+        Some(true)
+    } else if name.contains("BackWheels") {
+        Some(false)
+    } else {
+        None
     }
 }
 
@@ -414,10 +393,27 @@ mod tests {
 
     #[test]
     fn contact_wheel_rotation_points_with_steer_direction() {
-        let right = contact_wheel_rotation(0.0, 0.42, 0.0) * Vec3::Z;
-        let left = contact_wheel_rotation(0.0, -0.42, 0.0) * Vec3::Z;
+        let right = asset_wheel_rotation(Quat::IDENTITY, 0.42, 0.0) * Vec3::Z;
+        let left = asset_wheel_rotation(Quat::IDENTITY, -0.42, 0.0) * Vec3::Z;
 
         assert!(right.x > 0.0);
         assert!(left.x < 0.0);
+    }
+
+    #[test]
+    fn imported_vehicle_wheel_names_bind_to_visual_roles() {
+        assert_eq!(
+            imported_wheel_role("SportsCar_FrontLeftWheel_Cylinder.013"),
+            Some(true)
+        );
+        assert_eq!(
+            imported_wheel_role("SportsCar2_FrontRightWheel_Cylinder.018"),
+            Some(true)
+        );
+        assert_eq!(
+            imported_wheel_role("SportsCar_BackWheels_Cylinder.004"),
+            Some(false)
+        );
+        assert_eq!(imported_wheel_role("SportsCar_Cube.005"), None);
     }
 }

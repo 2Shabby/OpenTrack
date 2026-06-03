@@ -34,7 +34,7 @@ Choose recipe → Generate track → Drive → Retry → Beat ghost → Climb le
 * ghost replays
 * multiple surfaces
 * fast restart/retry
-* simple car visuals
+* imported car visuals
 * debug/tuning tools
 
 ## Out of Scope
@@ -134,6 +134,7 @@ Core behavior:
 * steering
 * grip/slip
 * per-wheel surface/contact sampling for handling decisions
+* imported wheel visuals driven from asset nodes where available
 * visual body roll/pitch from steering, acceleration, braking, and impacts
 * airborne control
 * slope response
@@ -166,6 +167,7 @@ Arcade drift direction:
 * tune drift by changing lateral grip, yaw authority, and damping rather than adding drivetrain complexity
 * keep body roll and wheel pose as visual/readability primitives unless a gameplay reason requires them to affect handling
 * keep reverse steering separate from forward drift behavior so backing up stays predictable
+* keep gameplay wheel contacts as explicit sampled contact patches rather than deriving physics from imported art meshes
 
 ## Surfaces
 
@@ -279,6 +281,8 @@ It appears through pieces like:
 
 It should be controlled by recipe bias, not forced into every track.
 
+Banking is desired, but not yet implemented. It should tilt road cross-sections and contact frames without introducing uneven terrain or noisy heightfield behavior.
+
 ## Hotseat
 
 Hotseat is local and turn-based.
@@ -352,7 +356,7 @@ Required screens:
 * main menu
 * track recipe/seed selection
 * hotseat player setup
-* car color selection
+* car selection
 * in-run HUD
 * pause menu
 * post-run results
@@ -361,7 +365,7 @@ Required screens:
 Initial screen behavior:
 
 * main menu starts a local hotseat session or quits
-* setup screens collect player names, car colors, recipe length, and seed
+* setup screens collect player names, car choice, recipe length, and seed
 * pause menu can resume, restart current run, return to setup/menu, or quit
 * post-run screen shows finish time, checkpoint progress, current leaderboard, and next-player/retry actions
 
@@ -556,7 +560,7 @@ Implemented systems:
 * Off-track grass/forest scenery using textures from `~/Downloads/LowpolyForestPack.zip`.
 * Debug overlay for seed, pieces, generated entity counts, player state, run state, speed, signed speed, drive mode, surface, and tuning values.
 * App state shell with main menu, setup screen, driving state, pause overlay, results screen, and clean spawned-scene teardown.
-* Setup controls for player count, seed, track length, and car color.
+* Setup controls for player count, seed, track length, and car selection.
 
 Current constraints:
 
@@ -569,6 +573,9 @@ Current constraints:
 * Ghosts are session-only best ghosts and are not keyed by player, recipe, seed, generator version, or physics tuning version.
 * Road and rail queries are backed by Avian static cuboid colliders, with project-owned metadata still used for surface lookup and gameplay response semantics.
 * Road/rail colliders are on separate collision layers so future dynamic/query-only colliders do not pollute track queries.
+* Imported sports-car scene roots are separate from the logical `PlayerCar`; wheel visuals bind to imported wheel node names when the FBX scene exposes them.
+* Four gameplay wheel contacts are sampled from fixed car-space offsets and remain independent from imported mesh topology.
+* Surface state no longer recolors wheel visuals; surface/contact feedback belongs in HUD/debug diagnostics rather than mutating imported car materials.
 * No audio, controller support, input rebinding, player profiles, or persisted settings.
 
 Completed recent code changes:
@@ -577,7 +584,7 @@ Completed recent code changes:
 2. Moved track, car, camera, lighting, ghost, and debug spawning behind state transitions.
 3. Added main menu and local hotseat setup flow.
 4. Added recipe controls for seed and length.
-5. Added car color selection using the existing sports-car mesh.
+5. Added sports-car selection using imported car assets.
 6. Added pause overlay with resume, restart, setup/menu, and quit actions.
 7. Added post-run/results screen with leaderboard and next-player/retry actions.
 8. Added sampled curve generation and road mesh generation from path frames.
@@ -605,6 +612,9 @@ Completed recent code changes:
 30. Added `kurbo` as the shared 2D path layer for road polygons, boundary extraction, and rail span derivation from boundary paths.
 31. Split generated piece shape from surface assignment and replaced the generic curve piece with fixed 45/90/180-degree turn shapes.
 32. Changed planner occupancy to use road footprint sectors from generated road spans instead of centerline sample cells, fixing valid-looking overlapping tracks.
+33. Split imported vehicle scene ownership from the logical car body and moved vehicle selection into a dedicated car asset plugin.
+34. Removed spawned cuboid wheel visuals and per-surface wheel material recoloring.
+35. Added imported wheel node binding by asset `Name` for front wheel steering and wheel spin while keeping contact mechanics independent from imported mesh topology.
 
 Next code changes:
 
@@ -613,12 +623,13 @@ Next code changes:
 3. Classify true section boundaries versus internal seams so rails never appear at surface-transition seams.
 4. Add dedicated road/rail primitive validation that compares generated mesh edges, boundary paths, collider spans, and trigger normals for each section.
 5. Move the fixed shape catalog into piece metadata with connection rules and candidate weighting.
-6. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
-7. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
-8. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
-9. Improve setup/results/pause UI polish within the current screen modules instead of rebuilding the shell architecture.
-10. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
-11. Keep player-profile and persistence work deferred until generation and physics-query stability improve.
+6. Add banked track frames after the flat road/rail/contact pipeline is coherent; banking should affect visual road cross-section, contact frame orientation, body roll, and future collider orientation without adding uneven terrain.
+7. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
+8. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
+9. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
+10. Improve setup/results/pause UI polish within the current screen modules instead of rebuilding the shell architecture.
+11. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
+12. Keep player-profile and persistence work deferred until generation and physics-query stability improve.
 
 ## Current Audit: Shell Flow and Curved Track Primitives
 
@@ -758,18 +769,18 @@ Procedural assembly has started:
 * App now starts at a basic main menu and enters gameplay through `MainMenu -> Setup -> Driving`.
 * Track/session spawning now happens on entering `Driving`; generated scene cleanup is state-owned.
 * Escape opens an in-game pause overlay; resume preserves the active driving scene and main menu exits cleanly.
-* Setup screen configures player count, track seed, track length, and car color before spawning gameplay.
+* Setup screen configures player count, track seed, track length, and car selection before spawning gameplay.
 * Finished runs move to a results screen with retry, next-player, main-menu, quit, and in-memory leaderboard display.
 * Driving model samples four wheel surface contacts and reports them in debug for split-surface drift tuning.
 * First-pass drift assist uses slip state to reduce lateral damping and add controlled yaw assist while sliding.
-* Car visuals now use separate body and wheel primitives with body roll/pitch, front-wheel steering, and wheel spin.
+* Car visuals use imported vehicle scenes with body roll/pitch, imported wheel-node steering, and wheel spin where asset nodes are exposed.
 * In-run HUD shows driver, timer, checkpoint progress, speed, best time, and ghost time; verbose debug is toggled with F3.
 * Grass field, forest, and rocks are placed relative to generated track bounds instead of fixed world coordinates.
 * Track validation now checks empty tracks, missing finish/checkpoint, checkpoint-before-finish order, short pieces, zero-length segments, route yaw bounds, connections, occupied sectors, and generated counts.
 * Four-wheel contact samples now affect lateral grip, so split-surface cases change handling.
 * Off-track surface is now grass instead of asphalt, with slower acceleration and higher drag.
-* Wheel visuals tint by contact surface, and HUD shows handling/surface state.
-* Setup recipe controls now expose one generation mode: player count, seed, length, and car color.
+* Wheel visuals no longer tint by contact surface; HUD/debug show handling and surface state.
+* Setup recipe controls now expose one generation mode: player count, seed, length, and car selection.
 * `track/piece.rs` now exposes one piece geometry contract for road spans, rail spans, and checkpoint/finish trigger lines.
 * Track spawning and validation now consume the same generated piece geometry instead of rebuilding road, rail, and trigger bounds separately.
 * Turns are now explicit generated piece shapes instead of one generic curve kind, and the generator tries fixed turn candidates before straights when footprint sectors fit.
