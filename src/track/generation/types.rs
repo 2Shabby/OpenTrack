@@ -184,14 +184,10 @@ pub fn car_spawn_for(pieces: &[TrackPiece]) -> CarSpawn {
         return CarSpawn::default();
     };
     let entry = first_piece.entry();
-    let start = entry.position + forward_2d(entry.yaw) * 1.1;
+    let start = entry.position + entry.forward() * 1.1;
 
     CarSpawn {
         translation: Vec3::new(start.x, 0.05, start.y),
         yaw: entry.yaw,
     }
-}
-
-pub fn forward_2d(yaw: f32) -> Vec2 {
-    Pose2::new(Vec2::ZERO, yaw).forward()
 }

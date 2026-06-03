@@ -595,6 +595,9 @@ Completed recent code changes:
 21. Added a `TrackPath` sampling boundary so future Bevy curve or `kurbo` experiments can replace path internals without changing track pieces, meshes, colliders, rails, or triggers.
 22. Replaced manual straight/arc frame sampling internals with Bevy's built-in curve API while preserving the current `PathFrame` output contract.
 23. Replaced the hand-built road strip mesh indices with `bevy_procedural_meshes` / Lyon fill tessellation as the single road surface mesh path.
+24. Split shell UI code by screen/flow: main menu, setup, results, and pause.
+25. Grouped large Bevy system signatures with local `SystemParam` structs and query aliases so driving/debug systems are easier to read and clippy-clean without adding generic app layers.
+26. Added a focused road mesh unit test that verifies procedural road meshes land on the X/Z ground plane.
 
 Next code changes:
 
@@ -605,8 +608,9 @@ Next code changes:
 5. Add `rstar` spatial indexing if overlap validation becomes a measurable bottleneck or piece counts increase substantially.
 6. Add unreachable-finish validation once branching, verticality, or non-forward pieces exist.
 7. Add vertical track pieces only after the generator can validate slope/ramp recovery and support placement.
-8. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
-9. Keep UI/player/profile/persistence work deferred until generation and physics-query stability improve.
+8. Improve setup/results/pause UI polish within the current screen modules instead of rebuilding the shell architecture.
+9. Move handling constants toward data/tuning assets, then evaluate `bevy_lookup_curve`.
+10. Keep player-profile and persistence work deferred until generation and physics-query stability improve.
 
 ## Current Code Slice
 
@@ -629,6 +633,8 @@ Procedural assembly has started:
 * Generated scene entities are tagged by semantic role: environment, scenery, road surface, rail, trigger, player, camera, and lighting.
 * Shared geometry types (`Pose2`, `OrientedRect`) are the single source of truth for X/Z poses and oriented bounds.
 * Road colliders, rail colliders, triggers, and track pieces no longer carry parallel center/yaw/extent conventions.
+* Shell code is split by screen/flow so future setup, results, and pause UI changes can stay local.
+* Driving and debug systems use small local Bevy `SystemParam` groups where the system context had grown too wide.
 * Physics query results, hotseat state, ghost samples, and car reset semantics have been narrowed to the minimum current API.
 * Avian `PhysicsPlugins` are installed through the local physics plugin.
 * Physics code is layered into components, collision layers, and Avian query adapters instead of one large module.
@@ -667,7 +673,7 @@ Procedural assembly has started:
 
 ### Product Shell
 
-Current shell flow is prototype-complete for the local session loop. Product-shell polish is deferred while physics queries and sequential generation are the active focus.
+Current shell flow is prototype-complete for the local session loop, and the code is split by screen so setup/results/pause polish can happen locally. Player profiles and persistence remain deferred while physics queries and sequential generation are the active focus.
 
 ### Gameplay and Track
 

@@ -1,6 +1,7 @@
 mod model;
 
 use avian3d::prelude::SpatialQuery;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 pub use model::{DriveMode, DrivingTuning, HandlingState};
@@ -18,6 +19,17 @@ const WHEEL_SAMPLE_HALF_LENGTH: f32 = 1.72;
 const BODY_ROLL_RATE: f32 = 0.18;
 const BODY_PITCH_RATE: f32 = 0.05;
 const BODY_VISUAL_HEIGHT: f32 = 0.0;
+
+type WheelVisualQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Transform,
+        &'static WheelVisual,
+        &'static MeshMaterial3d<StandardMaterial>,
+    ),
+    (With<WheelVisual>, Without<PlayerCar>),
+>;
 
 #[derive(Clone, Copy, Resource)]
 pub struct CarSpawn {
@@ -211,63 +223,71 @@ impl GroundContact {
     }
 }
 
-fn drive_car(
-    time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    car_spawn: Res<CarSpawn>,
-    tuning: Res<DrivingTuning>,
-    surfaces: Res<SurfaceLibrary>,
-    spatial_query: SpatialQuery,
-    roads: Query<(Entity, &RoadCollider)>,
-    rails: Query<(Entity, &RailCollider)>,
-    mut cars: Query<(&mut Transform, &mut PlayerCar)>,
-) {
-    let dt = time.delta_secs();
-    let physics = AvianTrackPhysicsQueries::new(&spatial_query, &roads, &rails);
+#[derive(SystemParam)]
+struct DrivingContext<'w, 's> {
+    time: Res<'w, Time>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    car_spawn: Res<'w, CarSpawn>,
+    tuning: Res<'w, DrivingTuning>,
+    surfaces: Res<'w, SurfaceLibrary>,
+    spatial_query: SpatialQuery<'w, 's>,
+    roads: Query<'w, 's, (Entity, &'static RoadCollider)>,
+    rails: Query<'w, 's, (Entity, &'static RailCollider)>,
+}
+
+fn drive_car(ctx: DrivingContext, mut cars: Query<(&mut Transform, &mut PlayerCar)>) {
+    let dt = ctx.time.delta_secs();
+    let physics = AvianTrackPhysicsQueries::new(&ctx.spatial_query, &ctx.roads, &ctx.rails);
 
     for (mut transform, mut car) in &mut cars {
-        if keys.just_pressed(KeyCode::KeyR) {
-            car.reset_to_spawn(&mut transform, *car_spawn);
+        if ctx.keys.just_pressed(KeyCode::KeyR) {
+            car.reset_to_spawn(&mut transform, *ctx.car_spawn);
         }
 
-        let controls = model::DriverControls::from_keys(&keys);
+        let controls = model::DriverControls::from_keys(&ctx.keys);
         car.throttle = controls.throttle;
         car.steer = controls.steer;
         let ground = physics.ground_at(transform.translation);
         car.current_surface = ground.surface;
         car.ground_source = ground.source;
 
-        let surface = surfaces.get(car.current_surface);
+        let surface = ctx.surfaces.get(car.current_surface);
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
         car.wheel_contacts = sample_wheel_contacts(&physics, transform.translation, &basis);
-        let contact_lateral_grip = car.wheel_contacts.average_lateral_grip(&surfaces);
+        let contact_lateral_grip = car.wheel_contacts.average_lateral_grip(&ctx.surfaces);
         car.signed_speed = basis.forward_speed;
         car.slip_angle = basis.slip_angle();
         car.drive_mode = model::drive_mode(controls.throttle, basis.forward_speed);
-        car.handling_state = model::handling_state(&tuning, &basis);
+        car.handling_state = model::handling_state(&ctx.tuning, &basis);
 
-        car.yaw += model::steering_yaw_delta(&tuning, &surface, controls, &basis) * dt;
-        car.yaw += model::slide_yaw_assist(&tuning, controls, &basis, car.handling_state) * dt;
+        car.yaw += model::steering_yaw_delta(&ctx.tuning, &surface, controls, &basis) * dt;
+        car.yaw += model::slide_yaw_assist(&ctx.tuning, controls, &basis, car.handling_state) * dt;
 
         let basis = model::MotionBasis::from_yaw(car.yaw, car.velocity);
-        let drive_force =
-            model::drive_force(&tuning, &surface, controls.throttle, basis.forward_speed);
-        let lateral_grip_multiplier = model::lateral_grip_multiplier(&tuning, car.handling_state);
+        let drive_force = model::drive_force(
+            &ctx.tuning,
+            &surface,
+            controls.throttle,
+            basis.forward_speed,
+        );
+        let lateral_grip_multiplier =
+            model::lateral_grip_multiplier(&ctx.tuning, car.handling_state);
 
         car.velocity += basis.forward * controls.throttle * drive_force * dt;
         car.velocity += basis.forward * surface.boost_force * dt;
         car.velocity -= basis.right
             * basis.lateral_speed
-            * tuning.lateral_grip
+            * ctx.tuning.lateral_grip
             * contact_lateral_grip
             * lateral_grip_multiplier
             * dt;
-        car.velocity *= 1.0 / (1.0 + tuning.drag * surface.drag * surface.rolling_resistance * dt);
+        car.velocity *=
+            1.0 / (1.0 + ctx.tuning.drag * surface.drag * surface.rolling_resistance * dt);
 
         let capped_forward_speed = car
             .velocity
             .dot(basis.forward)
-            .clamp(-tuning.max_reverse_speed, tuning.max_forward_speed);
+            .clamp(-ctx.tuning.max_reverse_speed, ctx.tuning.max_forward_speed);
         let capped_lateral_speed = car.velocity.dot(basis.right);
         car.velocity = basis.forward * capped_forward_speed + basis.right * capped_lateral_speed;
 
@@ -282,7 +302,7 @@ fn drive_car(
             }
         }
 
-        next_translation.y = car_spawn.translation.y;
+        next_translation.y = ctx.car_spawn.translation.y;
         transform.translation = next_translation;
         transform.rotation = Quat::from_rotation_y(car.yaw);
     }
@@ -323,14 +343,7 @@ fn update_car_body_visual(
 fn update_wheel_visuals(
     time: Res<Time>,
     car: Single<(&Transform, &PlayerCar)>,
-    mut wheels: Query<
-        (
-            &mut Transform,
-            &WheelVisual,
-            &MeshMaterial3d<StandardMaterial>,
-        ),
-        (With<WheelVisual>, Without<PlayerCar>),
-    >,
+    mut wheels: WheelVisualQuery,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let (car_transform, car_state) = *car;

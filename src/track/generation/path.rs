@@ -93,6 +93,8 @@ fn arc_frames(
 }
 
 fn sample_pose_curve(curve: &impl Curve<Pose2>, steps: usize) -> Vec<PathFrame> {
+    let steps = steps.max(1);
+
     (0..=steps)
         .map(|step| {
             let t = step as f32 / steps as f32;

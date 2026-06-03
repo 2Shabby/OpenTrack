@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::driving::PlayerCar;
@@ -55,17 +56,22 @@ fn despawn_debug_overlay(mut commands: Commands, overlays: Query<Entity, With<De
     }
 }
 
+#[derive(SystemParam)]
+struct DebugSnapshot<'w, 's> {
+    car: Single<'w, 's, &'static PlayerCar>,
+    run: Res<'w, RunState>,
+    ghost: Res<'w, SessionBestGhost>,
+    hotseat: Res<'w, HotseatSession>,
+    surfaces: Res<'w, SurfaceLibrary>,
+    track: Res<'w, GeneratedTrackInfo>,
+    road_surfaces: Query<'w, 's, (), With<GeneratedRoadSurface>>,
+    rails: Query<'w, 's, (), With<GeneratedRail>>,
+    triggers: Query<'w, 's, (), With<GeneratedTrigger>>,
+}
+
 fn update_debug_overlay(
     debug: Res<DebugOverlayState>,
-    car: Single<&PlayerCar>,
-    run: Res<RunState>,
-    ghost: Res<SessionBestGhost>,
-    hotseat: Res<HotseatSession>,
-    surfaces: Res<SurfaceLibrary>,
-    track: Res<GeneratedTrackInfo>,
-    road_surfaces: Query<(), With<GeneratedRoadSurface>>,
-    rails: Query<(), With<GeneratedRail>>,
-    triggers: Query<(), With<GeneratedTrigger>>,
+    snapshot: DebugSnapshot,
     mut overlay: Single<(&mut Text, &mut Visibility), With<DebugOverlay>>,
 ) {
     overlay.1.set_if_neq(if debug.visible {
@@ -77,35 +83,38 @@ fn update_debug_overlay(
         return;
     }
 
-    let params = surfaces.get(car.current_surface);
-    let best = hotseat
+    let car = *snapshot.car;
+    let params = snapshot.surfaces.get(car.current_surface);
+    let best = snapshot
+        .hotseat
         .best_summary()
         .map(|(name, finish_time)| format!("{name} {finish_time:.2}"))
         .unwrap_or_else(|| "none".to_string());
-    let ghost_best = ghost
+    let ghost_best = snapshot
+        .ghost
         .finish_time()
         .map(|time| format!("{time:.2}"))
         .unwrap_or_else(|| "none".to_string());
 
     overlay.0.0 = format!(
         "seed: {}\npieces: {}\ntrack cps: {}\nroad: {}/{}\nrail: {}/{}\ntrigger: {}/{}\nplayer: {}\nplayers: {}\nbest: {}\nghost: {}\ntime: {:>6.2}\nrun: {}\ncheckpoint: {}/{}\nspeed: {:>5.1}\nsigned: {:+5.1}\nmode: {}\nhandling: {}\nslip: {:>4.0} deg\nground: {} {}\nwheels: {}\nsplit: {}\nthrottle: {:+.0}\nsteer: {:+.0}\nlat grip: {:.2}\naccel mult: {:.2}",
-        track.seed,
-        track.piece_count,
-        track.checkpoint_count,
-        road_surfaces.iter().count(),
-        track.road_surface_count,
-        rails.iter().count(),
-        track.rail_count,
-        triggers.iter().count(),
-        track.trigger_count,
-        hotseat.active_player_name(),
-        hotseat.player_count(),
+        snapshot.track.seed,
+        snapshot.track.piece_count,
+        snapshot.track.checkpoint_count,
+        snapshot.road_surfaces.iter().count(),
+        snapshot.track.road_surface_count,
+        snapshot.rails.iter().count(),
+        snapshot.track.rail_count,
+        snapshot.triggers.iter().count(),
+        snapshot.track.trigger_count,
+        snapshot.hotseat.active_player_name(),
+        snapshot.hotseat.player_count(),
         best,
         ghost_best,
-        run.elapsed,
-        run.status_label(),
-        run.next_checkpoint,
-        run.checkpoint_count,
+        snapshot.run.elapsed,
+        snapshot.run.status_label(),
+        snapshot.run.next_checkpoint,
+        snapshot.run.checkpoint_count,
         car.velocity.length(),
         car.signed_speed,
         car.drive_mode.label(),
