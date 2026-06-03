@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 
-use crate::car_asset::sports_car_mesh;
 use crate::driving::PlayerCar;
 use crate::game_state::{GameState, not_paused};
 use crate::geometry::yaw_rotation;
@@ -69,7 +68,7 @@ fn spawn_ghost_visual(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     commands.spawn((
-        Mesh3d(meshes.add(sports_car_mesh())),
+        Mesh3d(meshes.add(Cuboid::new(1.7, 0.6, 3.6))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgba(0.25, 0.75, 1.0, 0.38),
             alpha_mode: AlphaMode::Blend,

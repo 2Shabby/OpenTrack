@@ -11,10 +11,8 @@ use super::markers::{
 use super::piece::{TrackPieceMarker, TrackRailSpan, TrackRoadSpan, TrackTriggerLine};
 use super::road_mesh::road_surface_mesh;
 use super::scenery::{spawn_forest_scenery, spawn_grass_field};
-use crate::car_asset::sports_car_mesh;
-use crate::driving::{
-    CarBodyVisual, CarPaint, CarSpawn, ChaseCamera, PlayerCar, WheelCorner, WheelVisual,
-};
+use crate::car_asset::VehicleSelection;
+use crate::driving::{CarBodyVisual, CarSpawn, ChaseCamera, PlayerCar, WheelCorner, WheelVisual};
 use crate::geometry::{forward_3d, xz_translation, yaw_rotation};
 use crate::physics::{
     RailCollider, RoadCollider, rail_collider, rail_collision_layers, road_collider,
@@ -27,7 +25,7 @@ pub fn spawn_generated_track(
     mut commands: Commands,
     recipe: &TrackRecipe,
     asset_server: &AssetServer,
-    car_paint: &CarPaint,
+    vehicle_selection: &VehicleSelection,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -59,8 +57,9 @@ pub fn spawn_generated_track(
         &mut commands,
         &mut meshes,
         &mut materials,
+        asset_server,
         car_spawn,
-        *car_paint,
+        *vehicle_selection,
     );
     spawn_lighting(&mut commands);
     spawn_camera(&mut commands, car_spawn);
@@ -185,15 +184,10 @@ fn spawn_car(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    asset_server: &AssetServer,
     car_spawn: CarSpawn,
-    car_paint: CarPaint,
+    vehicle_selection: VehicleSelection,
 ) {
-    let body_material = materials.add(StandardMaterial {
-        base_color: car_paint.color,
-        metallic: 0.15,
-        perceptual_roughness: 0.45,
-        ..default()
-    });
     commands.spawn((
         Transform::from_translation(car_spawn.translation)
             .with_rotation(yaw_rotation(car_spawn.yaw)),
@@ -203,8 +197,7 @@ fn spawn_car(
     ));
 
     commands.spawn((
-        Mesh3d(meshes.add(sports_car_mesh())),
-        MeshMaterial3d(body_material),
+        SceneRoot(asset_server.load(vehicle_selection.vehicle.fbx_scene_path())),
         Transform::from_translation(car_spawn.translation)
             .with_rotation(yaw_rotation(car_spawn.yaw)),
         CarBodyVisual,

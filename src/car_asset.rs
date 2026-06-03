@@ -1,76 +1,47 @@
-use bevy::asset::RenderAssetUsages;
-use bevy::mesh::Indices;
 use bevy::prelude::*;
-use bevy::render::render_resource::PrimitiveTopology;
 
-const SPORTS_CAR_OBJ: &str = include_str!("../assets/cars/SportsCar.obj");
-
-pub fn sports_car_mesh() -> Mesh {
-    obj_to_mesh(SPORTS_CAR_OBJ)
+#[derive(Clone, Copy, Resource)]
+pub struct VehicleSelection {
+    pub vehicle: VehicleKind,
 }
 
-fn obj_to_mesh(source: &str) -> Mesh {
-    let mut source_positions = Vec::new();
-    let mut positions = Vec::new();
-    let mut normals = Vec::new();
-    let mut uvs = Vec::new();
-    let mut indices = Vec::new();
+impl Default for VehicleSelection {
+    fn default() -> Self {
+        Self {
+            vehicle: VehicleKind::SportsCar,
+        }
+    }
+}
 
-    for line in source.lines() {
-        let mut parts = line.split_whitespace();
-        let Some(kind) = parts.next() else {
-            continue;
-        };
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VehicleKind {
+    SportsCar,
+    SportsCar2,
+}
 
-        match kind {
-            "v" => {
-                let x = parse_f32(parts.next());
-                let y = parse_f32(parts.next());
-                let z = parse_f32(parts.next());
-                source_positions.push(Vec3::new(x, y, z));
-            }
-            "f" => {
-                let face = parts
-                    .filter_map(parse_obj_position_index)
-                    .filter_map(|index| source_positions.get(index).copied())
-                    .collect::<Vec<_>>();
-
-                for i in 1..face.len().saturating_sub(1) {
-                    let triangle = [face[0], face[i], face[i + 1]];
-                    let normal = (triangle[1] - triangle[0])
-                        .cross(triangle[2] - triangle[0])
-                        .normalize_or_zero();
-
-                    for vertex in triangle {
-                        indices.push(positions.len() as u32);
-                        positions.push(vertex.to_array());
-                        normals.push(normal.to_array());
-                        uvs.push([0.0, 0.0]);
-                    }
-                }
-            }
-            _ => {}
+impl VehicleKind {
+    pub const fn from_index(index: usize) -> Self {
+        match index {
+            0 => Self::SportsCar,
+            _ => Self::SportsCar2,
         }
     }
 
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-    .with_inserted_indices(Indices::U32(indices))
-}
+    pub const fn count() -> usize {
+        2
+    }
 
-fn parse_f32(value: Option<&str>) -> f32 {
-    value.and_then(|value| value.parse().ok()).unwrap_or(0.0)
-}
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::SportsCar => "SportsCar",
+            Self::SportsCar2 => "SportsCar2",
+        }
+    }
 
-fn parse_obj_position_index(value: &str) -> Option<usize> {
-    value
-        .split('/')
-        .next()
-        .and_then(|index| index.parse::<usize>().ok())
-        .and_then(|index| index.checked_sub(1))
+    pub const fn fbx_scene_path(self) -> &'static str {
+        match self {
+            Self::SportsCar => "cars/fbx/SportsCar.fbx#Scene0",
+            Self::SportsCar2 => "cars/fbx/SportsCar2.fbx#Scene0",
+        }
+    }
 }

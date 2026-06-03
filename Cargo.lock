@@ -1208,6 +1208,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ef8e4b7e61dfe7719bb03c884dc270cd46a82efb40f93e9933b990c5c190c59"
 
 [[package]]
+name = "bevy_obj"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5219a9a91cc87e44aa52376e33d7feb52cdbd71d65c60d548eaddb8b78b1471d"
+dependencies = [
+ "bevy",
+ "serde",
+ "thiserror 2.0.18",
+ "wobj",
+]
+
+[[package]]
 name = "bevy_pbr"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1648,6 +1660,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88545c8b0fa8f3502b9a439c71fa6b596ee9e808bfb16f27a51c8c6f7405a657"
 dependencies = [
  "bevy",
+]
+
+[[package]]
+name = "bevy_ufbx"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce31af4df234bae92d017442aa63e5d20e18e53d04c3c149180752569818fc7e"
+dependencies = [
+ "bevy",
+ "serde",
+ "thiserror 2.0.18",
+ "ufbx",
 ]
 
 [[package]]
@@ -4482,7 +4506,9 @@ dependencies = [
  "avian3d",
  "bevy",
  "bevy_egui",
+ "bevy_obj",
  "bevy_procedural_meshes",
+ "bevy_ufbx",
  "kurbo",
  "rand",
  "rand_chacha",
@@ -5883,6 +5909,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "214ca0b2191785cbc06209b9ca1861e048e39b5ba33574b3cedd58363d5bb5f6"
 
 [[package]]
+name = "ufbx"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bf2324f07023fcd0507bb122c5406911e73f7b4f1056c903d740b57128bab84"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7135,6 +7170,17 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
+]
+
+[[package]]
+name = "wobj"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0502c0794b9b6c0c6b1b868c67b2186149f8ca72d256b424180d750c1dc2bae8"
+dependencies = [
+ "ahash",
+ "indexmap",
+ "winnow 1.0.3",
 ]
 
 [[package]]

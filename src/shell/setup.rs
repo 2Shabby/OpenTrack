@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use super::SessionSetup;
-use crate::driving::CarPaint;
+use crate::car_asset::{VehicleKind, VehicleSelection};
 use crate::game_state::GameState;
 use crate::hotseat::HotseatSession;
 use crate::run::RunState;
@@ -25,8 +25,8 @@ pub(super) enum SetupAction {
     SeedUp,
     LengthDown,
     LengthUp,
-    ColorDown,
-    ColorUp,
+    VehicleDown,
+    VehicleUp,
     StartRace,
     Back,
 }
@@ -36,7 +36,7 @@ pub(super) enum SetupValue {
     Players,
     Seed,
     Length,
-    Color,
+    Vehicle,
 }
 
 pub(super) fn spawn(mut commands: Commands) {
@@ -90,10 +90,10 @@ pub(super) fn spawn(mut commands: Commands) {
             );
             row(
                 parent,
-                "Color",
-                SetupValue::Color,
-                SetupAction::ColorDown,
-                SetupAction::ColorUp,
+                "Vehicle",
+                SetupValue::Vehicle,
+                SetupAction::VehicleDown,
+                SetupAction::VehicleUp,
             );
 
             button(parent, "Start Race", SetupAction::StartRace);
@@ -105,7 +105,7 @@ pub(super) fn handle(
     mut setup: ResMut<SessionSetup>,
     mut recipe: ResMut<TrackRecipe>,
     mut hotseat: ResMut<HotseatSession>,
-    mut car_paint: ResMut<CarPaint>,
+    mut vehicle_selection: ResMut<VehicleSelection>,
     mut run: ResMut<RunState>,
     mut next_state: ResMut<NextState<GameState>>,
     buttons: SetupButtons,
@@ -126,17 +126,17 @@ pub(super) fn handle(
                 setup.piece_count = setup.piece_count.saturating_sub(1).max(4)
             }
             SetupAction::LengthUp => setup.piece_count = (setup.piece_count + 1).min(64),
-            SetupAction::ColorDown => {
-                setup.car_color_index = setup.car_color_index.saturating_sub(1);
+            SetupAction::VehicleDown => {
+                setup.vehicle_index = setup.vehicle_index.saturating_sub(1);
             }
-            SetupAction::ColorUp => {
-                setup.car_color_index = (setup.car_color_index + 1).min(car_color_count() - 1);
+            SetupAction::VehicleUp => {
+                setup.vehicle_index = (setup.vehicle_index + 1).min(VehicleKind::count() - 1);
             }
             SetupAction::StartRace => {
                 recipe.seed = setup.seed;
                 recipe.piece_count = setup.piece_count;
                 hotseat.configure_player_count(setup.player_count);
-                car_paint.color = car_color(setup.car_color_index);
+                vehicle_selection.vehicle = VehicleKind::from_index(setup.vehicle_index);
                 run.reset();
                 next_state.set(GameState::Driving);
             }
@@ -151,7 +151,9 @@ pub(super) fn update_values(setup: Res<SessionSetup>, mut values: Query<(&mut Te
             SetupValue::Players => setup.player_count.to_string(),
             SetupValue::Seed => setup.seed.to_string(),
             SetupValue::Length => setup.piece_count.to_string(),
-            SetupValue::Color => car_color_name(setup.car_color_index).to_string(),
+            SetupValue::Vehicle => VehicleKind::from_index(setup.vehicle_index)
+                .name()
+                .to_string(),
         };
     }
 }
@@ -234,28 +236,4 @@ fn button(parent: &mut ChildSpawnerCommands, label: &str, action: SetupAction) {
                 SetupEntity,
             ));
         });
-}
-
-fn car_color_count() -> usize {
-    5
-}
-
-fn car_color_name(index: usize) -> &'static str {
-    match index {
-        0 => "Red",
-        1 => "Blue",
-        2 => "Green",
-        3 => "Yellow",
-        _ => "White",
-    }
-}
-
-fn car_color(index: usize) -> Color {
-    match index {
-        0 => Color::srgb(0.92, 0.08, 0.05),
-        1 => Color::srgb(0.08, 0.24, 0.92),
-        2 => Color::srgb(0.08, 0.62, 0.2),
-        3 => Color::srgb(0.95, 0.78, 0.08),
-        _ => Color::srgb(0.9, 0.9, 0.86),
-    }
 }

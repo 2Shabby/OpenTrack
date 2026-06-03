@@ -46,7 +46,7 @@ pub(super) struct SessionSetup {
     pub player_count: usize,
     pub seed: u64,
     pub piece_count: usize,
-    pub car_color_index: usize,
+    pub vehicle_index: usize,
 }
 
 impl Default for SessionSetup {
@@ -55,7 +55,7 @@ impl Default for SessionSetup {
             player_count: 2,
             seed: 0x5EED_2026,
             piece_count: 8,
-            car_color_index: 0,
+            vehicle_index: 0,
         }
     }
 }

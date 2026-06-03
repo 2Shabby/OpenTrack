@@ -13,6 +13,8 @@ mod surface;
 mod track;
 
 use bevy::prelude::*;
+use bevy_obj::ObjPlugin;
+use bevy_ufbx::FbxPlugin;
 use debug::DebugPlugin;
 use driving::DrivingPlugin;
 use ghost::GhostPlugin;
@@ -35,6 +37,7 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins((FbxPlugin, ObjPlugin))
         .init_state::<game_state::GameState>()
         .add_plugins((
             SurfacePlugin,

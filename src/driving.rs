@@ -6,6 +6,7 @@ use bevy::prelude::*;
 
 pub use model::{DriveMode, DrivingTuning, HandlingState};
 
+use crate::car_asset::VehicleSelection;
 use crate::game_state::{GameState, not_paused};
 use crate::geometry::{forward_3d, right_3d, yaw_rotation};
 use crate::physics::{
@@ -60,7 +61,7 @@ impl Plugin for DrivingPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(DrivingTuning::default())
             .insert_resource(CarSpawn::default())
-            .insert_resource(CarPaint::default())
+            .insert_resource(VehicleSelection::default())
             .add_systems(
                 FixedUpdate,
                 drive_car.run_if(in_state(GameState::Driving).and(not_paused)),
@@ -72,19 +73,6 @@ impl Plugin for DrivingPlugin {
                     .after(drive_car)
                     .run_if(in_state(GameState::Driving).and(not_paused)),
             );
-    }
-}
-
-#[derive(Clone, Copy, Resource)]
-pub struct CarPaint {
-    pub color: Color,
-}
-
-impl Default for CarPaint {
-    fn default() -> Self {
-        Self {
-            color: Color::srgb(0.92, 0.08, 0.05),
-        }
     }
 }
 
