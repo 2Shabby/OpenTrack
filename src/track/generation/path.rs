@@ -24,8 +24,9 @@ impl TrackPath {
     pub(crate) fn for_piece(entry: Pose2, kind: TrackPieceKind) -> Self {
         match kind {
             TrackPieceKind::Straight | TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish => {
-                Self::straight(entry)
+                Self::straight(entry, PIECE_LENGTH)
             }
+            TrackPieceKind::DoubleStraight => Self::straight(entry, PIECE_LENGTH * 2.0),
             TrackPieceKind::Turn { direction, angle } => Self::ConstantArc {
                 entry,
                 direction,
@@ -36,11 +37,8 @@ impl TrackPath {
         }
     }
 
-    fn straight(entry: Pose2) -> Self {
-        Self::Straight {
-            entry,
-            length: PIECE_LENGTH,
-        }
+    fn straight(entry: Pose2, length: f32) -> Self {
+        Self::Straight { entry, length }
     }
 
     pub(crate) fn sample_frames(self) -> Vec<PathFrame> {

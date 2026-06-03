@@ -85,7 +85,9 @@ fn road_span(frames: [PathFrame; 2]) -> TrackRoadSpan {
 
 fn trigger_line(piece: &TrackPiece) -> Option<TrackTriggerLine> {
     let (marker, pose) = match piece.kind {
-        TrackPieceKind::Straight | TrackPieceKind::Turn { .. } => return None,
+        TrackPieceKind::Straight | TrackPieceKind::DoubleStraight | TrackPieceKind::Turn { .. } => {
+            return None;
+        }
         TrackPieceKind::Checkpoint(index) => (TrackPieceMarker::Checkpoint(index), piece.entry()),
         TrackPieceKind::Finish => (TrackPieceMarker::Finish, piece.exit()),
     };

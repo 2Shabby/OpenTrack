@@ -173,9 +173,12 @@ fn piece_kind_candidates(
     let rotation = rng.random_range(0..turns.len());
     turns.rotate_left(rotation);
 
-    let mut candidates = Vec::with_capacity(turns.len() + 1);
-    candidates.extend(turns);
+    let mut candidates = Vec::with_capacity(turns.len() + 2);
     candidates.push(TrackPieceKind::Straight);
+    candidates.push(TrackPieceKind::DoubleStraight);
+    candidates.extend(turns);
+    let rotation = rng.random_range(0..candidates.len());
+    candidates.rotate_left(rotation);
     candidates
 }
 

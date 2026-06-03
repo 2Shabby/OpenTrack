@@ -125,7 +125,9 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
 
     if let Some(trigger) = geometry.trigger {
         let expected_pose = match piece.kind {
-            TrackPieceKind::Straight | TrackPieceKind::Turn { .. } => piece.entry(),
+            TrackPieceKind::Straight
+            | TrackPieceKind::DoubleStraight
+            | TrackPieceKind::Turn { .. } => piece.entry(),
             TrackPieceKind::Checkpoint(_) => piece.entry(),
             TrackPieceKind::Finish => piece.exit(),
         };
@@ -145,7 +147,10 @@ fn validate_piece_primitive(piece: &TrackPiece, index: usize) -> Result<(), Stri
     }
 
     match piece.kind {
-        TrackPieceKind::Straight | TrackPieceKind::Checkpoint(_) | TrackPieceKind::Finish => {
+        TrackPieceKind::Straight
+        | TrackPieceKind::DoubleStraight
+        | TrackPieceKind::Checkpoint(_)
+        | TrackPieceKind::Finish => {
             if piece.frames.len() != 2 {
                 return Err(format!(
                     "piece {index} has {} frames for a straight-aligned piece, expected 2",
@@ -358,7 +363,7 @@ mod tests {
 
     use super::super::assembly::generate_track_pieces;
     use super::super::path::TrackPath;
-    use super::super::types::{TrackRecipe, TurnAngle, TurnDirection};
+    use super::super::types::{PIECE_LENGTH, TrackRecipe, TurnAngle, TurnDirection};
 
     #[test]
     fn generated_tracks_validate_across_seed_range() {
@@ -391,6 +396,38 @@ mod tests {
                 "seed {seed} generated no turn pieces"
             );
         }
+    }
+
+    #[test]
+    fn generated_tracks_include_double_straights_across_seed_range() {
+        let mut double_straight_count = 0;
+
+        for seed in 0..128 {
+            let recipe = TrackRecipe {
+                seed,
+                piece_count: 24,
+            };
+            let pieces = generate_track_pieces(&recipe);
+
+            double_straight_count += pieces
+                .iter()
+                .filter(|piece| matches!(piece.kind, TrackPieceKind::DoubleStraight))
+                .count();
+        }
+
+        assert!(double_straight_count > 0);
+    }
+
+    #[test]
+    fn double_straight_uses_two_piece_lengths() {
+        let frames = test_frames(
+            Pose2::new(bevy::prelude::Vec2::ZERO, 0.0),
+            TrackPieceKind::DoubleStraight,
+        );
+
+        assert_eq!(frames.len(), 2);
+        let length = frames[0].pose.position.distance(frames[1].pose.position);
+        assert!((length - PIECE_LENGTH * 2.0).abs() <= 0.001);
     }
 
     #[test]

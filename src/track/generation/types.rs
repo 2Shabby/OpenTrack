@@ -90,6 +90,7 @@ impl TrackBounds {
 #[derive(Clone, Copy, Debug)]
 pub enum TrackPieceKind {
     Straight,
+    DoubleStraight,
     Turn {
         direction: TurnDirection,
         angle: TurnAngle,

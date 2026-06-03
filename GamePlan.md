@@ -13,7 +13,7 @@ In scope:
 * one active car at a time
 * local hotseat sessions
 * deterministic generated tracks from seed + length
-* fixed modular piece shapes: straight, 45-degree turn, 90-degree turn, 180-degree turn
+* fixed modular piece shapes: straight, double straight, 45-degree turn, 90-degree turn, 180-degree turn
 * multiple handling surfaces
 * checkpoint/finish triggers
 * session leaderboard
