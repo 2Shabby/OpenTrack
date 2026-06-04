@@ -1,3 +1,4 @@
+mod camera;
 mod car_asset;
 mod debug;
 mod driving;
@@ -11,6 +12,7 @@ mod track;
 
 use bevy::prelude::*;
 use bevy_ufbx::FbxPlugin;
+use camera::RaceCameraPlugin;
 use car_asset::CarAssetPlugin;
 use debug::DebugPlugin;
 use driving::DrivingPlugin;
@@ -39,6 +41,7 @@ fn main() {
             PhysicsQueriesPlugin,
             TrackPlugin,
             DrivingPlugin,
+            RaceCameraPlugin,
             HotseatPlugin,
             DebugPlugin,
             ShellPlugin,

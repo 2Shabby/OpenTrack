@@ -5,7 +5,7 @@ use super::types::{
 use std::collections::HashSet;
 
 const MAX_ROUTE_YAW: f32 = std::f32::consts::PI * 0.85;
-const OCCUPANCY_CELL_SIZE: f32 = 6.0;
+const OCCUPANCY_CELL_SIZE: f32 = 7.2;
 const MAX_BANK_DELTA_PER_METER: f32 = 0.07;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

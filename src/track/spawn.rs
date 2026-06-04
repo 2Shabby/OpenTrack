@@ -11,8 +11,9 @@ use super::markers::{
 use super::path_geometry::{line_segments, road_edges};
 use super::piece::{TrackPieceMarker, TrackRailSpan, TrackTriggerLine};
 use super::road_mesh::road_surface_mesh;
+use crate::camera::RaceCameraBundle;
 use crate::car_asset::VehicleSelection;
-use crate::driving::{CarSpawn, ChaseCamera, PlayerCar, VehicleSceneRoot};
+use crate::driving::{CarSpawn, PlayerCar, VehicleSceneRoot};
 use crate::geometry::forward_3d;
 use crate::physics::{
     RailCollider, RoadCollider, VehicleCollider, rail_collision_layers, rail_path_collider,
@@ -43,9 +44,9 @@ pub fn spawn_generated_track(
     commands.insert_resource(track_info);
     commands.insert_resource(car_spawn);
 
-    spawn_car(&mut commands, asset_server, car_spawn, *vehicle_selection);
+    let car = spawn_car(&mut commands, asset_server, car_spawn, *vehicle_selection);
     spawn_lighting(&mut commands);
-    spawn_camera(&mut commands, car_spawn);
+    spawn_camera(&mut commands, car_spawn, car);
 }
 
 fn log_generated_track_debug(recipe: &TrackRecipe, pieces: &[TrackPiece], car_spawn: CarSpawn) {
@@ -318,17 +319,19 @@ fn spawn_car(
     asset_server: &AssetServer,
     car_spawn: CarSpawn,
     vehicle_selection: VehicleSelection,
-) {
-    commands.spawn((
-        car_spawn.transform(),
-        PlayerCar::default(),
-        vehicle_rigid_body(),
-        vehicle_collision_layers(),
-        vehicle_collider(),
-        VehicleCollider,
-        SpawnedPlayer,
-        SpawnedSceneEntity,
-    ));
+) -> Entity {
+    let car = commands
+        .spawn((
+            car_spawn.transform(),
+            PlayerCar::default(),
+            vehicle_rigid_body(),
+            vehicle_collision_layers(),
+            vehicle_collider(),
+            VehicleCollider,
+            SpawnedPlayer,
+            SpawnedSceneEntity,
+        ))
+        .id();
 
     commands.spawn((
         SceneRoot(asset_server.load(vehicle_selection.fbx_scene_path())),
@@ -336,6 +339,8 @@ fn spawn_car(
         VehicleSceneRoot,
         SpawnedSceneEntity,
     ));
+
+    car
 }
 
 fn spawn_lighting(commands: &mut Commands) {
@@ -351,15 +356,9 @@ fn spawn_lighting(commands: &mut Commands) {
     ));
 }
 
-fn spawn_camera(commands: &mut Commands, car_spawn: CarSpawn) {
-    let rotation = car_spawn.rotation();
-    let forward = rotation * Vec3::Z;
-    let up = rotation * Vec3::Y;
+fn spawn_camera(commands: &mut Commands, car_spawn: CarSpawn, car: Entity) {
     commands.spawn((
-        Camera3d::default(),
-        Transform::from_translation(car_spawn.translation - forward * 6.0 + up * 6.5)
-            .looking_at(car_spawn.translation, up),
-        ChaseCamera,
+        RaceCameraBundle::new(car, car_spawn),
         SpawnedCamera,
         SpawnedSceneEntity,
     ));

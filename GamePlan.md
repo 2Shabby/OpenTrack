@@ -24,7 +24,7 @@ In scope:
 * virtual wheel suspension for per-corner compression, presentation, and load-feel tuning
 * chassis contact material behavior for slippery, non-snagging body/rail impacts
 * directional boost pads that apply track/pad-frame acceleration
-* velocity-aware camera and wheel/motor telemetry for future audio feedback
+* crate-backed damped velocity-aware camera and wheel/motor telemetry for future audio feedback
 * single repaired SportsCar FBX asset with scoped material normalization and transform-based wheel binding for the current importer output
 * automatic reset to start when the car center leaves valid road contact; there is no off-road driving/collider fallback
 * debug/tuning overlays
@@ -46,6 +46,7 @@ Out of scope for now:
 Main layers:
 
 * `driving`: arcade car state, input mapping, yaw/velocity handling, wheel contact sampling, body and imported-wheel visuals.
+* `camera`: `bevy_third_person_camera_2` target damping plus game-specific racing position/rotation damping from car forward, velocity, and banked up.
 * `surface`: data-driven handling parameters for asphalt, dirt, ice, and boost road pieces.
 * `track`: recipe, generated pieces, path frames, road mesh, rail/road/trigger spawning, scene cleanup.
 * `physics`: project-owned query trait plus Avian-backed ground queries and MoveAndSlide rail collision resolution.
@@ -93,6 +94,7 @@ Current generator:
 * road surface meshes use `bevy_procedural_meshes`
 * 2D path vocabulary and boundary extraction use `kurbo`
 * Bevy curve APIs sample straight and constant-arc pieces into `PathFrame`s
+* baseline track scale is 20% larger than the first banking pass: wider road, longer pieces, larger turn radius, proportional rails, and matching occupancy cells
 * bank transitions use dense smootherstep samples so road mesh, road collider, rails, and wheel support raycasts see the same gradual crossfall
 * road contact colliders are piece-level Avian triangle meshes from sampled path edges
 * rail collision colliders are track-level Avian compound capsules from merged sampled boundary paths
@@ -135,7 +137,7 @@ Implemented in this physics polish line:
 * Directional boost pads: boost is authored/applied in pad or track-frame direction, not car-forward.
 * Virtual suspension: use per-wheel ground samples to derive compression/rebound and presentation/body attitude without introducing dynamic ODE-style joints.
 * Surface compliance: softness/recovery modulation is a surface parameter, layered into the same tire model rather than a separate drift mode.
-* Velocity-based camera: camera lookahead blends toward current velocity while wheel/motor telemetry remains available for a future audio module.
+* Crate-backed chase camera: `bevy_third_person_camera_2` owns target damping/offset components while the game supplies bank-aware racing orientation, speed-biased follow distance, and damped pose transitions.
 * Tire-supported steering yaw: front steer angle now produces a target yaw rate, yaw-rate state follows through response/damping, high-speed steering fades, front tire saturation limits steering support, and collision resolution feeds back the accepted yaw rate.
 * Steering servo state: player input sets a target front-wheel angle, the resolved wheel angle follows through a response knob, and tire yaw uses the resolved angle rather than raw input.
 * Non-asset vehicle feedback: motor pitch/load, front wheel target/actual RPM, and slip intensity are computed from wheel telemetry for future audio or UI without adding playback assets yet.
@@ -170,6 +172,7 @@ Grip/drift split:
 * Dirt: lower lateral authority and slower recovery, but still driveable without forcing constant drift.
 * Ice: the exception surface; slip can be frequent, but should still feel legible and recoverable.
 * Boost: fast and grippy/readable; acceleration follows the road/pad frame direction rather than car forward.
+* Current tuning pass: all surfaces are less drift-prone than the first faster/wider pass through higher lateral grip/recovery, lower passive slip scale, higher slide gates, and reduced rear-brake yaw/grip loss.
 
 ## Dependencies
 
@@ -183,6 +186,7 @@ Current useful crates:
 * `rand_chacha`: deterministic generation
 * `ron`/`serde`: future tuning and recipe data
 * `bevy_ufbx`: imported FBX vehicle assets
+* `bevy_third_person_camera_2`: damped third-person camera target/offset components; local mouse/keyboard camera control is intentionally not bound for racing.
 * Blender CLI: repeatable SportsCar FBX inspection/repair through `tools/sports_car_fbx_tool.py`, including outward front-wheel hub verification
 
 Future crate candidates:
@@ -198,17 +202,17 @@ Do not add a vehicle-controller crate unless it clearly supports Bevy 0.18, dete
 Current foundation:
 
 * app flow, setup, pause, hotseat player order, and debug overlay
-* deterministic generated tracks with straights, sampled curves, dense eased bank transitions, banked frames, road meshes, road colliders, merged rail colliders, surface-bound checkpoints, and surface-bound finish triggers
+* deterministic generated tracks with straights, sampled curves, dense eased bank transitions, banked frames, road meshes, road colliders, merged rail colliders, surface-bound checkpoints, and surface-bound finish triggers at the wider 20% track scale
 * single imported SportsCar visual with front-wheel steering, outward-facing front hubs, wheel spin, wheel load scaling, virtual suspension offsets, and importer-scoped opaque materials
-* custom deterministic controller with signed speed, four logical wheel contacts, wheel-derived support frame, target-speed motor force, front-biased drive, steering-servo tire yaw, rear-wheel rear brake, combined-slip tire budgets, per-wheel friction, load/saturation debug, and vehicle feedback signals
+* custom deterministic controller with signed speed, four logical wheel contacts, wheel-derived support frame, faster target-speed motor force, front-biased drive, steering-servo tire yaw, rear-wheel rear brake, combined-slip tire budgets, per-wheel friction, load/saturation debug, and vehicle feedback signals
 * Avian-backed ground raycasts plus full-orientation MoveAndSlide rail collision resolution, used as static track queries rather than a vehicle controller
 * centered rounded vehicle collider, yaw-limited collision pose resolution, projected rail scrape velocity, and collision debug telemetry
 * chassis contact velocity/yaw material response that removes inward rail speed, preserves scrape speed, and avoids full old-pose fallbacks where a clear partial translation exists
 * lightweight wheel angular-speed/slip telemetry with imported wheel spin driven from per-axle wheel state instead of elapsed-time signed-speed fallback
 * directional boost pads driven by generated piece path direction
 * virtual suspension compression/rebound driving wheel offsets and visual body attitude
-* surface compliance tuning for dirt softness without a separate surface physics path
-* velocity-biased chase camera direction
+* less-drifty surface compliance tuning for asphalt stability, dirt softness, ice readability, and boost control without a separate surface physics path
+* crate-backed damped chase camera with velocity-biased direction, speed-biased distance, bank-aware up vector, and explicit position/rotation smoothing across transitions
 * validation around piece continuity, generated counts, trigger ordering/alignment, and coherent rail boundary paths
 
 Explicitly removed for the vehicle-physics migration:
@@ -224,7 +228,7 @@ These should be rebuilt later against the final vehicle state shape rather than 
 
 Active gameplay order:
 
-1. In-game feel verification. Recheck asphalt grip, loose surfaces, boost pads, suspension presentation, velocity camera, and rail scrape on repeatable seeds.
+1. In-game feel verification. Recheck asphalt grip, loose surfaces, boost pads, suspension presentation, damped camera, and rail scrape on repeatable seeds.
 2. If the car is still too drifty, tune the single yaw/tire path in this order: `max_steer_angle`, `high_speed_steer_fade`, `yaw_rate_response`, `yaw_rate_damping`, `lateral_stiffness`, `straight_line_settling`, `slide_saturation_threshold`, `slide_slip_angle_threshold`, then rear-brake cost/yaw scalars.
 3. Keep rear brake secondary. It may consume rear tire reserve and add a small gated yaw assist, but asphalt steering should not need it for ordinary corners.
 4. Rebuild runtime timing, HUD/results, leaderboard, and ghost replay only after the vehicle physics path is stable.

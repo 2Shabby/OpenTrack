@@ -144,6 +144,7 @@ Surface intent:
 - Grass/off-track terrain: removed for now; road misses reset to the current start spawn instead of applying a hidden terrain surface or off-road collider.
 - Ice: very low lateral/longitudinal friction, low recovery, muted yaw assist.
 - Boost: keep its surface friction close to asphalt. If boost behavior feels wrong later, make boost a trigger/event rather than a surface-wide forward acceleration.
+- Current less-drifty pass keeps those relative identities but raises lateral authority/recovery and reduces passive slip plus rear-brake amplification on every surface.
 
 Primary code target: [src/surface.rs](/Users/shaik/Code/OpenTrackTurbo/src/surface.rs:54).
 
@@ -243,19 +244,22 @@ Implemented Rust behavior:
 
 Primary code target: [src/surface.rs](/Users/shaik/Code/OpenTrackTurbo/src/surface.rs:32).
 
-### 11. Velocity-Based Camera And Motor-Speed Feedback
+### 11. Damped Velocity-Based Camera And Motor-Speed Feedback
 
 ManiaDrive's chase camera looks toward velocity, and engine pitch follows motor speed. OpenTrackTurbo can use the same player-facing idea without adopting the old engine stack.
 
 Implemented Rust behavior:
 
-- Blend camera look target between car forward and velocity direction.
-- Increase chase distance or lookahead from speed without losing corner readability.
+- Use `bevy_third_person_camera_2` for damped third-person target/offset components.
+- Blend camera look direction between car forward and velocity direction.
+- Increase chase distance from speed without losing corner readability, with a slightly closer average framing than the first crate-backed pass.
+- Preserve the road/banked support up vector instead of reverting to world-up camera framing.
+- Dampen camera position and rotation explicitly so banking/curve transition changes do not snap the view.
 - Keep wheel/motor RPM available for audio once an audio module exists.
 
 Primary code targets:
 
-- Camera: [src/driving.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving.rs:374)
+- Camera: [src/camera.rs](/Users/shaik/Code/OpenTrackTurbo/src/camera.rs:1)
 - Wheel telemetry: [src/driving/model.rs](/Users/shaik/Code/OpenTrackTurbo/src/driving/model.rs:442)
 
 ## Recommended Implementation Order
@@ -307,8 +311,9 @@ Primary code targets:
    - Dirt softness comes from compliance-modulated lateral correction and recovery.
    - Asphalt and boost remain firm.
 
-11. Completed baseline: velocity-based camera and motor-speed feedback prep.
-   - Blend camera lookahead toward velocity.
+11. Completed baseline: damped velocity-based camera and motor-speed feedback prep.
+   - Blend camera look direction toward velocity.
+   - Use crate-backed third-person target damping plus game-side position/rotation damping rather than the old driving-owned camera transform lerp.
    - Use motor/wheel speed for audio when an audio module exists.
 
 ## Remaining Implementation Scope
@@ -321,7 +326,7 @@ Keep the order:
 - Verify rear brake as secondary rotation.
 - Verify boost pads on straights and curves.
 - Verify dirt compliance and ice readability.
-- Verify rail scrape after the new velocity camera and suspension presentation are active.
+- Verify rail scrape after the damped camera and suspension presentation are active.
 
 This continues the same ManiaDrive lesson: wheels, axles, and contact material matter even in an arcade model.
 

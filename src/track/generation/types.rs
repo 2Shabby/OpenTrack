@@ -4,10 +4,10 @@ use crate::driving::{CAR_GROUND_OFFSET, CarSpawn};
 use crate::geometry::{Pose2, forward_3d, right_3d, rotation_from_yaw_and_up, xz_translation};
 use crate::surface::SurfaceKind;
 
-pub const TRACK_WIDTH: f32 = 12.0;
-pub const PIECE_LENGTH: f32 = 14.0;
-pub const RAIL_HEIGHT: f32 = 0.45;
-pub const RAIL_THICKNESS: f32 = 0.28;
+pub const TRACK_WIDTH: f32 = 14.4;
+pub const PIECE_LENGTH: f32 = 16.8;
+pub const RAIL_HEIGHT: f32 = 0.54;
+pub const RAIL_THICKNESS: f32 = 0.336;
 pub const MAX_BANK_ANGLE: f32 = std::f32::consts::FRAC_PI_4;
 
 #[derive(Resource)]
@@ -117,9 +117,9 @@ impl TurnAngle {
 
     pub(crate) fn sample_steps(self) -> usize {
         match self {
-            Self::Deg45 => 6,
-            Self::Deg90 => 10,
-            Self::Deg180 => 18,
+            Self::Deg45 => 8,
+            Self::Deg90 => 12,
+            Self::Deg180 => 22,
         }
     }
 }

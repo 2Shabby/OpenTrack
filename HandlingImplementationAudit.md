@@ -34,7 +34,7 @@ Normal driving is primary. Rear-brake drift is a secondary rotation tool, not th
 * `PlayerCar` stores a wheel-derived support frame: support state, contact count, support normal, support axes, dominant surface, and boost direction.
 * `drive_car` derives drift assist before tire force calculation and feeds it into `tire_forces`.
 * `drive_car` advances yaw from `resolved_yaw_rate`, not raw steering input.
-* `drive_car` now uses the same support frame for force basis, car transform rotation, visual-root rotation, camera up, and rail collision pose. The transform no longer gets overwritten with yaw-only world-up rotation on banked road.
+* `drive_car` now uses the same support frame for force basis, car transform rotation, visual-root rotation, camera-facing input, and rail collision pose. The transform no longer gets overwritten with yaw-only world-up rotation on banked road.
 * Collision resolution feeds back accepted yaw into `yaw_rate`, so rail contact cannot leave stale free rotation.
 * The single active SportsCar FBX is visual-only. Wheel mesh fragments bind by the current imported local transform pattern, the FBX repair script canonicalizes mesh names and verifies outward front hub orientation, and car-scene material normalization is scoped to descendants of `VehicleSceneRoot`.
 * Service brake does not trigger drift assist.
@@ -62,7 +62,9 @@ Normal driving is primary. Rear-brake drift is a secondary rotation tool, not th
 * The car did not right itself to banked surfaces because physics used road normals while transform and collider pose stayed yaw-only/world-up. The car pose now uses yaw plus a wheel-derived support normal.
 * Checkpoint/finish strips and the start pose were not coherently bound to banked surfaces. They now use the relevant `PathFrame` center/normal/yaw instead of fixed world height plus yaw-only placement.
 * Bank transitions were too jerky because transition pieces were sampled as one large twisted quad, leaving the road collider with coarse triangle normals. `BankTransition` now uses dense smootherstep samples while ordinary held-bank straights remain endpoint-only.
+* The generated track now runs 20% wider, longer, and faster: road width, piece length, turn radius, rail scale, occupancy cells, bank-transition segment length, forward target speed, engine authority, and boost acceleration were scaled together.
 * Imported wheel visuals should not be corrected with runtime per-wheel flips. The Blender repair script now checks front hub center/normal geometry and mirrors only inward-facing front hubs in the FBX mesh data.
+* The old driving-owned chase camera system is removed. `src/camera.rs` uses `bevy_third_person_camera_2` for target damping and offset components, with one racing adapter for velocity-biased direction, speed-biased distance, banked-road up, and damped position/rotation transitions.
 
 No user-blocking decision is open for the next implementation pass.
 
@@ -94,6 +96,7 @@ Surface behavior:
 * Surface profiles scale the same tire model.
 * Low-grip surfaces can trigger `SurfaceSlip` earlier than asphalt.
 * Rear-brake assist remains rear-wheel-biased on every surface.
+* Current values intentionally reduce driftiness across every surface: more lateral budget and recovery, lower passive slide scale, weaker rear-brake yaw/grip loss, and higher global slide/drift gates.
 
 ## Tests Added
 

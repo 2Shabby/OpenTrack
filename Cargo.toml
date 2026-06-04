@@ -9,3 +9,4 @@ bevy = "0.18.1"
 bevy_ufbx = "0.18"
 rand = "0.9"
 rand_chacha = "0.9"
+third_person_camera = { version = "0.2.0", package = "bevy_third_person_camera_2" }

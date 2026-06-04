@@ -26,8 +26,6 @@ const SPORTS_CAR_FRONT_WHEEL_OUTSET: f32 = 0.18;
 const SPORTS_CAR_REAR_WHEEL_WIDTH_SCALE: f32 = 1.16;
 const SPORTS_CAR_VISUAL_STEER_MULTIPLIER: f32 = 2.0;
 const SPORTS_CAR_MAX_VISUAL_STEER: f32 = 0.62;
-const CAMERA_VELOCITY_BLEND_SPEED: f32 = 24.0;
-const CAMERA_MAX_VELOCITY_BLEND: f32 = 0.55;
 const DRIVE_DEBUG_LOG_INTERVAL: f32 = 0.5;
 const WHEEL_CONTACT_COUNT: usize = model::WHEEL_COUNT;
 
@@ -103,7 +101,6 @@ impl Plugin for DrivingPlugin {
                     bind_imported_vehicle_wheels,
                     normalize_vehicle_materials,
                     update_imported_wheel_visuals,
-                    chase_camera,
                 )
                     .chain()
                     .after(drive_car)
@@ -184,9 +181,6 @@ impl PlayerCar {
         *transform = car_spawn.transform();
     }
 }
-
-#[derive(Component)]
-pub struct ChaseCamera;
 
 #[derive(Component)]
 pub struct VehicleSceneRoot;
@@ -746,40 +740,6 @@ fn is_sports_car_import_scale(scale: Vec3) -> bool {
         && (scale.z - SPORTS_CAR_ASSET_SCALE).abs() <= 0.002
 }
 
-fn chase_camera(
-    time: Res<Time>,
-    car: Single<(&Transform, &PlayerCar), With<PlayerCar>>,
-    mut camera: Single<&mut Transform, (With<ChaseCamera>, Without<PlayerCar>)>,
-) {
-    let (car_transform, car_state) = *car;
-    let speed = car_state.velocity.length();
-    let forward = car_transform.rotation * Vec3::Z;
-    let up = car_transform.rotation * Vec3::Y;
-    let tracking_direction = camera_tracking_direction(forward, car_state.velocity);
-    let target = car_transform.translation + up * 1.0;
-    let desired_position = target - tracking_direction * (7.5 + speed * 0.06) + up * 4.2;
-    let smoothing = 1.0 - (-8.0 * time.delta_secs()).exp();
-
-    camera.translation = camera.translation.lerp(desired_position, smoothing);
-    camera.look_at(target + tracking_direction * 4.0, up);
-}
-
-fn camera_tracking_direction(forward: Vec3, velocity: Vec3) -> Vec3 {
-    let speed = velocity.length();
-    if speed <= 0.5 {
-        return forward;
-    }
-
-    let velocity_direction = velocity / speed;
-    let blend = (speed / CAMERA_VELOCITY_BLEND_SPEED).clamp(0.0, CAMERA_MAX_VELOCITY_BLEND);
-    let blended = forward.lerp(velocity_direction, blend);
-    if blended.length_squared() > f32::EPSILON {
-        blended.normalize()
-    } else {
-        forward
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -925,15 +885,5 @@ mod tests {
 
         assert_eq!(roll, 0.0);
         assert!(pitch < 0.0);
-    }
-
-    #[test]
-    fn camera_tracking_blends_toward_velocity_direction() {
-        let forward = Vec3::Z;
-        let tracking = camera_tracking_direction(forward, Vec3::X * 24.0);
-
-        assert!(tracking.x > 0.0);
-        assert!(tracking.z > 0.0);
-        assert!((tracking.length() - 1.0).abs() < 0.001);
     }
 }

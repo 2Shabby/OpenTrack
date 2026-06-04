@@ -1531,6 +1531,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_third_person_camera_2"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "176f85bec9df7516da39169008db9a8e19049826143532ea33bea7b8af9a0edd"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_time"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4068,6 +4077,7 @@ version = "0.1.0"
 dependencies = [
  "avian3d",
  "bevy",
+ "bevy_third_person_camera_2",
  "bevy_ufbx",
  "rand",
  "rand_chacha",

@@ -7,9 +7,9 @@ use super::types::{
 };
 use crate::geometry::{Pose2, rotate_2d};
 
-const CURVE_RADIUS: f32 = 24.0;
+const CURVE_RADIUS: f32 = 28.8;
 const BANK_EPSILON: f32 = 0.001;
-const BANK_TRANSITION_SEGMENT_LENGTH: f32 = 1.75;
+const BANK_TRANSITION_SEGMENT_LENGTH: f32 = 2.1;
 const MIN_BANK_TRANSITION_STEPS: usize = 8;
 
 #[derive(Clone, Copy, Debug)]
