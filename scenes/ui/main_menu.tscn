@@ -1,0 +1,29 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/ui/menu_shell.tscn" id="1"]
+[ext_resource type="Script" path="res://scripts/main_menu.gd" id="2"]
+
+[node name="MainMenu" instance=ExtResource("1")]
+script = ExtResource("2")
+
+[node name="Title" type="Label" parent="Center/Panel/Column"]
+layout_mode = 2
+text = "Open Track Turbo"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Center/Panel/Column"]
+layout_mode = 2
+text = "Dirt & asphalt · Hotseat rally stages"
+horizontal_alignment = 1
+
+[node name="Start" type="Button" parent="Center/Panel/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 44)
+text = "Start Hotseat"
+
+[node name="Quit" type="Button" parent="Center/Panel/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 44)
+text = "Quit"

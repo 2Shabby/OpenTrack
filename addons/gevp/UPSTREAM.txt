@@ -1,0 +1,14 @@
+Vendored from https://github.com/DAShoe1/Godot-Easy-Vehicle-Physics
+commit c392257f54f6ca537dc10bc5badad0c060f18982
+MIT License — see LICENSE and README.md.
+Included: scripts/vehicle.gd, scripts/wheel.gd, LICENSE, README.md.
+Excluded: demo scenes, controllers, cameras, effects, and sounds.
+
+Local changes in scripts/wheel.gd:
+- Initialize previous_global_position at scene entry, preventing spawn-position
+  dependent velocity spikes on the first physics tick.
+- Initialize visual spring length at full extension.
+- Pass body-relative world offsets to apply_force for the wheel torque couple,
+  as required by Godot's RigidBody3D API.
+
+Formatting: removed trailing whitespace in both scripts; no behavior change.

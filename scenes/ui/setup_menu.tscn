@@ -1,0 +1,116 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/ui/menu_shell.tscn" id="1"]
+[ext_resource type="Script" path="res://scripts/setup_menu.gd" id="2"]
+
+[node name="SetupMenu" instance=ExtResource("1")]
+script = ExtResource("2")
+
+[node name="Title" type="Label" parent="Center/Panel/Column"]
+layout_mode = 2
+text = "Hotseat Rally"
+horizontal_alignment = 1
+
+[node name="Settings" type="GridContainer" parent="Center/Panel/Column"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 20
+theme_override_constants/v_separation = 10
+
+[node name="PlayersLabel" type="Label" parent="Center/Panel/Column/Settings"]
+layout_mode = 2
+text = "Drivers"
+
+[node name="Players" type="SpinBox" parent="Center/Panel/Column/Settings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 1.0
+
+[node name="SeedLabel" type="Label" parent="Center/Panel/Column/Settings"]
+layout_mode = 2
+text = "Stage seed"
+
+[node name="Seed" type="LineEdit" parent="Center/Panel/Column/Settings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Integer seed"
+
+[node name="LengthLabel" type="Label" parent="Center/Panel/Column/Settings"]
+layout_mode = 2
+text = "Stage length"
+
+[node name="Length" type="SpinBox" parent="Center/Panel/Column/Settings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+step = 100.0
+suffix = "m"
+
+[node name="AmplitudeLabel" type="Label" parent="Center/Panel/Column/Settings"]
+layout_mode = 2
+text = "Terrain relief"
+
+[node name="Amplitude" type="SpinBox" parent="Center/Panel/Column/Settings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 20.0
+step = 0.5
+suffix = "m"
+
+[node name="WavelengthLabel" type="Label" parent="Center/Panel/Column/Settings"]
+layout_mode = 2
+text = "Terrain wavelength"
+
+[node name="Wavelength" type="SpinBox" parent="Center/Panel/Column/Settings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 150.0
+max_value = 1000.0
+step = 10.0
+suffix = "m"
+
+[node name="GradientLabel" type="Label" parent="Center/Panel/Column/Settings"]
+layout_mode = 2
+text = "Max road grade"
+
+[node name="Gradient" type="SpinBox" parent="Center/Panel/Column/Settings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 10.0
+step = 0.5
+suffix = "%"
+
+[node name="BlendLabel" type="Label" parent="Center/Panel/Column/Settings"]
+layout_mode = 2
+text = "Shoulder blend"
+
+[node name="Blend" type="SpinBox" parent="Center/Panel/Column/Settings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 16.0
+max_value = 64.0
+step = 1.0
+suffix = "m"
+
+[node name="Error" type="Label" parent="Center/Panel/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 2
+
+[node name="Start" type="Button" parent="Center/Panel/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Start Stage"
+
+[node name="Back" type="Button" parent="Center/Panel/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back"

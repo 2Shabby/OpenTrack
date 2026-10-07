@@ -1,4 +1,11 @@
+> Historical audit: the current rally stage, terrain and native vehicle implementation is documented in `RallyStages.md` and `NativeGodotMigration.md`.
+
 # Collision Polish Audit
+
+
+The live implementation uses GEVP and built-in Jolt on a native rigid body. Rails and the old grounded controller are removed. See [NativeGodotMigration.md](NativeGodotMigration.md) and [VehicleHandling.md](VehicleHandling.md) for the current architecture and validation. The source paths and behavior below are historical snapshots.
+
+## Historical collision audit
 
 ## Goal
 

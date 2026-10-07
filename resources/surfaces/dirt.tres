@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SurfaceProfile" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/surface_profile.gd" id="1"]
+[ext_resource type="Material" path="res://materials/dirt.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "dirt"
+group_name = "Dirt"
+material = ExtResource("2")
+friction = 1.45
+stiffness = 2.4
+rolling_resistance = 2.4
+lateral_grip_assist = 0.0
+longitudinal_grip_ratio = 0.42

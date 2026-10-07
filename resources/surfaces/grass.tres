@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SurfaceProfile" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/surface_profile.gd" id="1"]
+[ext_resource type="Material" path="res://materials/grass.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "grass"
+group_name = "Grass"
+material = ExtResource("2")
+friction = 0.85
+stiffness = 1.0
+rolling_resistance = 18.0
+lateral_grip_assist = 0.0
+longitudinal_grip_ratio = 0.28
