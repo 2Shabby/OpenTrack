@@ -19,6 +19,11 @@ func _check(condition: bool, label: String) -> void:
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	_check(Engine.physics_ticks_per_second == 120, "native vehicle runs at 120 Hz")
+	if "--car-assets-only" in args:
+		await _test_car_assets()
+		print("car asset smoke: ", failures, " failures")
+		quit(0 if failures == 0 else 1)
+		return
 	if "--shoulders-only" in args:
 		await _test_shoulders()
 		print("shoulder smoke: ", failures, " failures")
@@ -31,6 +36,7 @@ func _run() -> void:
 			_test_generation()
 	if not "--terrain-controls" in args:
 		if not "--stages-only" in args:
+			await _test_car_assets()
 			await _test_shoulders()
 			await _test_vehicle()
 			await _test_surfaces()
@@ -332,12 +338,75 @@ func _test_generation() -> void:
 
 # These checks run the production scene through its own physics callbacks.
 # Test controls use GEVP's public input fields; there is no second solver.
+func _test_car_assets() -> void:
+	var game := root.get_node("Game")
+	var colors := {}
+	for i in game.MAX_PLAYERS:
+		colors[game.player_color(i)] = true
+	_check(colors.size() == game.MAX_PLAYERS, "all hotseat drivers have stable distinct paint colors")
+	var first: RallyCar = game.car_scene.instantiate()
+	var second: RallyCar = game.car_scene.instantiate()
+	first.configure(game.player_color(0))
+	second.configure(game.player_color(1))
+	_check(first.prepare() and second.prepare(), "voxel car satisfies the shared rig contract before scene entry")
+	_check(first.visual._paint.size() > 0 and first.visual._paint[0] != second.visual._paint[0], "paint materials are isolated per car instance")
+	_check(first.visual._paint[0].albedo_color == game.player_color(0) and second.visual._paint[0].albedo_color == game.player_color(1), "paint uses player color without altering other materials")
+	var glass: Material = first.visual.get_node("Model/CarModel/Body").get_active_material(0)
+	first.visual.set_lights(1, true)
+	_check(first.visual._tail[0].emission_energy_multiplier > 0 and first.visual._brake[0].emission_energy_multiplier == 3 and first.visual._reverse[0].emission_energy_multiplier == 1.5, "tail, brake and reverse lamps have separate active states")
+	_check(second.visual._brake[0].emission_energy_multiplier == 0 and second.visual._reverse[0].emission_energy_multiplier == 0, "lamp materials are isolated per car")
+	first.configure(game.player_color(2))
+	_check(first.visual._brake[0].emission_energy_multiplier == 3 and first.visual.get_node("Model/CarModel/Body").get_active_material(0) == glass, "paint changes preserve lamp state and glazing")
+	first.free()
+	second.free()
+	var invalid: RallyCar = game.car_scene.instantiate()
+	var visual: CarVisual = invalid.get_node("Visual")
+	visual.wheels[0] = visual.wheels[1]
+	_check(not invalid.prepare() and not invalid.configuration_error.is_empty(), "invalid wheel bindings are rejected before GEVP initialization")
+	invalid.free()
+	var track := _track(_fixture())
+	for split: float in [0.0, 0.5, 1.0]:
+		var car: RallyCar = game.car_scene.instantiate()
+		car.accept_input = false
+		car.front_torque_split = split
+		_check(car.place_at(_fixture_pose()), "drivetrain fixture prepares")
+		root.add_child(car)
+		await _frames(180)
+		_check(car.front_left_wheel.is_driven == (split > 0) and car.front_right_wheel.is_driven == (split > 0) and car.rear_left_wheel.is_driven == (split < 1) and car.rear_right_wheel.is_driven == (split < 1), "GEVP selects correct driven axles at split %s" % split)
+		_check(car.visual._brake[0].emission_energy_multiplier == 0, "spawn parking handbrake does not illuminate service brake lamps")
+		car.throttle_input = 1
+		await _frames(360)
+		_check(car.telemetry()["signed_speed"] > 8 and car.contact_count() == 4, "AWD/FWD/RWD fixture drives under native tire forces")
+		_check(absf(car.front_left_wheel.wheel_node.rotation.x) > 0.1 and car.front_left_wheel.wheel_node.position.y < 0, "wheel visuals follow native spin and suspension travel")
+		var rear_toe := car.rear_left_wheel.rotation.y
+		car.steering_input = 0.3
+		await _frames(12)
+		_check(absf(car.front_left_wheel.rotation.y) > 0.01 and is_equal_approx(car.rear_left_wheel.rotation.y, rear_toe), "front wheel visuals steer while rear wheels retain their authored toe")
+		car.steering_input = 0
+		car.throttle_input = 0
+		car.brake_input = 1
+		await _frames(30)
+		_check(car.visual._brake[0].emission_energy_multiplier > 2, "actual GEVP service braking lights brake lamps")
+		car.current_gear = -1
+		await _frames(2)
+		_check(car.visual._reverse[0].emission_energy_multiplier == 1.5, "actual reverse gear lights white lamps")
+		var brake_glow := car.visual._brake[0].emission_energy_multiplier
+		car.freeze_at_finish()
+		await _frames(2)
+		_check(car.visual._brake[0].emission_energy_multiplier == brake_glow and car.visual._reverse[0].emission_energy_multiplier == 1.5, "finish preserves lamp state")
+		print("car drivetrain split ", split, " verified")
+		await _dispose([car])
+	await _dispose([track])
+
+func _fixture_pose() -> Transform3D:
+	return Transform3D(Basis.IDENTITY, Vector3(0, 0, -110))
+
 func _frames(count: int) -> void:
 	for _i in count:
 		await physics_frame
 
 func _new_car(pose: Transform3D) -> RallyCar:
-	var car: RallyCar = preload("res://scenes/cars/player_car.tscn").instantiate()
+	var car: RallyCar = root.get_node("Game").car_scene.instantiate()
 	car.accept_input = false
 	car.place_at(pose)
 	root.add_child(car)
@@ -372,7 +441,7 @@ func _test_vehicle() -> void:
 	var car := _new_car(stage.road_pose(60))
 	_check(car.basis.determinant() > 0.999 and car.forward_vector().dot(Vector3.BACK) > 0.999, "spawn is a proper rotation pointing along road")
 	_check(car.front_left_wheel.position.x < 0 and car.front_right_wheel.position.x > 0 and car.front_left_wheel.position.z < car.rear_left_wheel.position.z, "physical left/right and front/rear axle ordering")
-	_check(car.front_tire_radius > 0.15 and car.front_tire_radius < 0.5 and car.front_tire_width > 80, "tire dimensions measured from imported mesh")
+	_check(is_equal_approx(car.front_tire_radius, 0.325) and is_equal_approx(car.front_tire_width, 200), "tire dimensions originate in the voxel asset")
 	_check(car.collision_layer == 4 and car.collision_mask == 3 and car.continuous_cd, "chassis collides with road and terrain")
 	await _frames(360)
 	_check(car.contact_count() == 4 and absf(car.linear_velocity.y) < 0.05, "four suspension rays settle on road")
@@ -598,6 +667,15 @@ func _test_generated_stages() -> void:
 		await _dispose([car, track])
 
 func _test_menus() -> void:
+	var game := root.get_node("Game")
+	var saved_car: PackedScene = game.car_scene
+	# A runtime fixture of this same model tests replacement without another asset.
+	var template: RallyCar = saved_car.instantiate()
+	template.front_torque_split = 0.0
+	var replacement := PackedScene.new()
+	_check(replacement.pack(template) == OK, "replacement car configuration packs as a native scene")
+	template.free()
+	game.car_scene = replacement
 	var app: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(app)
 	app.content.get_node("%Start").pressed.emit()
@@ -609,8 +687,8 @@ func _test_menus() -> void:
 	app.content.get_node("%Seed").text = "1592598566"
 	app.content.get_node("%Start").pressed.emit()
 	var race: Node = app.content
-	var game := root.get_node("Game")
 	_check(race.car_root is RigidBody3D and race.stage.requested_length_m == 1200 and not race.hud.get_node("%Pacenote").text.is_empty(), "setup starts native vehicle and rally HUD")
+	_check(race.car_root.front_torque_split == 0.0, "world spawns the selected car scene rather than a hardcoded model")
 	await _frames(240)
 	var parked_position: Vector3 = race.car_root.global_position
 	await _frames(240)
@@ -669,7 +747,9 @@ func _test_menus() -> void:
 	old = race.car_root.get_instance_id()
 	race.pause_menu.get_node("%NextDriver").pressed.emit()
 	_check(game.player_index == 1 and race._elapsed == 0 and not race._finished and race._best_times.has(0) and race.stage.get_instance_id() == stage_id, "hotseat preserves stage and driver bests")
+	_check(race.car_root.visual._paint[0].albedo_color == game.player_color(1), "hotseat handoff applies the next driver's stable paint")
 	_check(race.car_root.get_instance_id() != old and race.car_root.current_gear == 0 and race.car_root.wheel_array.size() == 4 and race.car_root.axles.size() == 2 and race.car_root.linear_velocity == Vector3.ZERO, "handoff recreates all hidden drivetrain/suspension state")
+	_check(race.car_root.front_torque_split == 0.0, "hotseat retains selected car configuration")
 	for wheel: Wheel in race.car_root.wheel_array:
 		_check(wheel.spin == 0 and wheel.previous_global_position.is_equal_approx(wheel.global_position), "fresh wheels have no stale spin or position history")
 	race.car_root.global_position += Vector3.UP * 8
@@ -678,9 +758,11 @@ func _test_menus() -> void:
 	race.car_root.global_position = Vector3(10000, 10000, 10000)
 	await _frames(3)
 	_check(race.recovery_count == 1 and race.car_root.global_position.distance_to(race._spawn_pose.origin) < 2, "outside finite world triggers full retry")
+	_check(race.car_root.visual._paint[0].albedo_color == game.player_color(1), "recovery preserves the active driver's paint")
 	race.set_paused(true)
 	race.pause_menu.get_node("%Setup").pressed.emit()
 	_check(app.content.has_node("%Players") and not game.paused and not paused, "pause-to-setup clears tree pause")
 	app.content.get_node("%Back").pressed.emit()
 	_check(app.content.has_node("%Quit"), "back returns to menu")
+	game.car_scene = saved_car
 	await _dispose([app])

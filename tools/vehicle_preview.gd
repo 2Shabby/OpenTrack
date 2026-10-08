@@ -37,9 +37,15 @@ func _run() -> void:
 	world.set_paused(true)
 	await _capture("paused")
 	world.set_paused(false)
-	await _frames(300)
-	await _capture("landed")
+	var landed := false
+	for _i in 1200:
+		await physics_frame
+		if world.car_root.contact_count() >= 3:
+			landed = true
+			break
+	await _capture("landed" if landed else "after-jump")
 	print("rendered vehicle: ", world.car_root.telemetry(), " recoveries ", world.recovery_count)
+	var passed: bool = landed and world.recovery_count == 0
 	app.queue_free()
 	await process_frame
-	quit()
+	quit(0 if passed else 1)

@@ -35,7 +35,8 @@ func start_race(seed_value: int, length_m: int) -> bool:
 	add_child(geometry)
 	geometry.build(stage)
 	_spawn_pose = stage.spawn_pose()
-	_spawn_car()
+	if not _spawn_car():
+		return false
 	track_info = stage.info()
 	_reset_run()
 	debug_label.text = "Track seed %s" % track_info.get("seed", 0)
@@ -103,32 +104,49 @@ func _resume() -> void:
 	set_paused(false)
 
 func _restart() -> void:
-	_restart_car()
-	_resume()
+	if _restart_car():
+		_resume()
 
-func _restart_car() -> void:
-	_spawn_car()
+func _restart_car() -> bool:
+	if not _spawn_car():
+		open_setup.emit()
+		return false
 	camera.reset_follow()
 	_reset_run()
 	_update_hud()
+	return true
 
 func _next_driver() -> void:
 	Game.next_driver()
-	_restart_car()
-	_resume()
+	if _restart_car():
+		_resume()
 
-func _spawn_car() -> void:
+func _spawn_car() -> bool:
 	if is_instance_valid(car_root):
 		remove_child(car_root)
 		car_root.free()
-	var car: RallyCar = preload("res://scenes/cars/player_car.tscn").instantiate()
-	car.place_at(_spawn_pose)
+		car_root = null
+	if Game.car_scene == null:
+		Game.setup_error = "Select a car scene before starting the stage."
+		return false
+	var instance := Game.car_scene.instantiate()
+	var car := instance as RallyCar
+	if car == null:
+		Game.setup_error = "Selected car scene must use the RallyCar controller."
+		instance.free()
+		return false
+	car.configure(Game.player_color(Game.player_index))
+	if not car.place_at(_spawn_pose):
+		Game.setup_error = car.configuration_error
+		car.free()
+		return false
 	add_child(car)
 	car.reset_physics_interpolation()
 	car.clear_held_input()
 	car_root = car
 	_previous_position = car.global_position
 	_telemetry = car.telemetry()
+	return true
 
 func _finish() -> void:
 	_finished = true

@@ -9,37 +9,68 @@ var suppress_until_release := false
 var clearance := 0.2
 var _prepared := false
 var _waiting_for_drive := true
+var configuration_error := ""
+var _player_color := Color.WHITE
+var visual: CarVisual
 
-func place_at(road_pose: Transform3D) -> void:
-	prepare()
+func configure(color: Color) -> void:
+	_player_color = color
+	if _prepared:
+		visual.configure(color)
+
+func place_at(road_pose: Transform3D) -> bool:
+	if not prepare():
+		return false
 	var up := road_pose.basis.y
 	# Turn +Z stage-forward into -Z vehicle-forward with a rotation, not a reflection.
 	transform = Transform3D(Basis(-road_pose.basis.x, up, -road_pose.basis.z), road_pose.origin + up * clearance)
+	return true
 
-func prepare() -> void:
+func prepare() -> bool:
 	if _prepared:
-		return
+		return true
+	visual = get_node_or_null("Visual") as CarVisual
+	configuration_error = "Car scene requires a CarVisual child named Visual." if visual == null else visual.validation_error()
+	if not configuration_error.is_empty():
+		return false
+	var rays: Array[Wheel] = [front_left_wheel, front_right_wheel, rear_left_wheel, rear_right_wheel]
+	if rays.has(null):
+		configuration_error = "Car scene requires four GEVP suspension ray bindings."
+		return false
+	var chassis_shapes := 0
+	for child in get_children():
+		if child is CollisionShape3D and not child.disabled:
+			if not (child.shape is BoxShape3D or child.shape is SphereShape3D or child.shape is CapsuleShape3D or child.shape is CylinderShape3D or child.shape is ConvexPolygonShape3D):
+				configuration_error = "Car chassis collision requires primitive or convex shapes."
+				return false
+			chassis_shapes += 1
+	if chassis_shapes == 0:
+		configuration_error = "Car scene requires chassis collision shapes on its rigid body."
+		return false
+	visual.configure(_player_color)
 	_apply_surfaces()
 	collision_layer = TrackGeometry.CAR_LAYER
 	collision_mask = TrackGeometry.SUPPORT_MASK
 	continuous_cd = true
-	var visual := get_node("Visual") as Node3D
-	var wheels: Dictionary = visual.bind_wheels()
-	_mount(front_left_wheel, wheels["front_left"], true)
-	_mount(front_right_wheel, wheels["front_right"], true)
-	_mount(rear_left_wheel, wheels["rear_left"], false)
-	_mount(rear_right_wheel, wheels["rear_right"], false)
-	front_tire_radius = wheels["front_left"]["radius"]
-	rear_tire_radius = wheels["rear_left"]["radius"]
-	front_tire_width = wheels["front_left"]["width"] * 1000.0
-	rear_tire_width = wheels["rear_left"]["width"] * 1000.0
-	_fit_chassis()
-	var contact := front_left_wheel.position.y - front_spring_length - front_tire_radius
-	clearance = -contact + SPAWN_MARGIN
+	var wheels := visual.wheel_bindings()
+	for i in 4:
+		_mount(rays[i], wheels[i], i < 2)
+	front_tire_radius = wheels[0]["radius"]
+	rear_tire_radius = wheels[2]["radius"]
+	front_tire_width = wheels[0]["width"] * 1000.0
+	rear_tire_width = wheels[2]["width"] * 1000.0
+	clearance = SPAWN_MARGIN
+	for i in 4:
+		var length := front_spring_length if i < 2 else rear_spring_length
+		clearance = maxf(clearance, -rays[i].position.y + length + wheels[i]["radius"] + SPAWN_MARGIN)
 	_prepared = true
+	return true
 
 func _ready() -> void:
-	prepare()
+	if not prepare():
+		push_error(configuration_error)
+		set_physics_process(false)
+		return
 	super._ready()
 
 func _physics_process(delta: float) -> void:
@@ -49,6 +80,7 @@ func _physics_process(delta: float) -> void:
 	if accept_input:
 		_read_input()
 	super._physics_process(delta)
+	visual.set_lights(brake_amount, current_gear == -1)
 
 func clear_held_input() -> void:
 	_zero_inputs()
@@ -130,31 +162,12 @@ func _mount(ray: Wheel, spec: Dictionary, front: bool) -> void:
 	ray.exclude_parent = true
 	ray.enabled = true
 	ray.add_exception(self)
-	var pivot := Node3D.new()
-	pivot.name = "Visual"
+	var pivot: Node3D = spec["pivot"]
+	pivot.owner = null
+	pivot.get_parent().remove_child(pivot)
 	ray.add_child(pivot)
-	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.mesh = spec["mesh"]
-	pivot.add_child(mesh_instance)
+	pivot.transform = Transform3D.IDENTITY
 	ray.wheel_node = pivot
-
-func _fit_chassis() -> void:
-	var visual := get_node("Visual") as Node3D
-	var chassis_shape := get_node("CollisionShape3D") as CollisionShape3D
-	var body: MeshInstance3D = visual.get_node("Model/SportsCar_Body")
-	var to_car: Transform3D = visual.to_car_space(body)
-	var aabb: AABB = body.mesh.get_aabb()
-	var minimum := Vector3(INF, INF, INF)
-	var maximum := Vector3(-INF, -INF, -INF)
-	for corner in 8:
-		var point := to_car * aabb.get_endpoint(corner)
-		minimum = minimum.min(point)
-		maximum = maximum.max(point)
-	var shape := BoxShape3D.new()
-	shape.size = maximum - minimum
-	shape.margin = 0.01
-	chassis_shape.shape = shape
-	chassis_shape.position = (minimum + maximum) * 0.5
 
 func _read_input() -> void:
 	var throttle := Input.get_action_strength("throttle_positive")

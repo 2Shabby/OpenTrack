@@ -25,7 +25,7 @@ Local hotseat rally stages on dirt and asphalt. The active pass builds readable 
 
 ## Architecture and limits
 
-Godot 4.7.2, built-in Jolt, GDScript and native Resources/meshes/bodies. GEVP owns suspension, tire forces and drivetrain; Jolt integrates the rigid body. Imported SportsCar visuals have four independent suspension/spin pivots. No banking, ice, boost, second physics backend, manual track editor, damage, online multiplayer or simultaneous racing is included.
+Godot 4.7.2, built-in Jolt, GDScript and native Resources/meshes/bodies. GEVP owns suspension, tire forces and drivetrain; Jolt integrates the rigid body. An original voxel hatchback has four independent wheel pivots, working rear lamps and stable hotseat paint colors. Inherited car scenes support future models and AWD/FWD/RWD tuning through the same controller; see `VoxelCars.md`. No banking, ice, boost, second physics backend, manual track editor, damage, online multiplayer or simultaneous racing is included.
 
 `RallyStages.md` documents generation and its reproducibility boundary. `NativeGodotMigration.md` documents ownership, vehicle integration, session lifecycle and dependency maintenance. Older handling/collision audits are historical snapshots and must not be treated as the current surface catalog or generation contract.
 

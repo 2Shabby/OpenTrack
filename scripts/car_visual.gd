@@ -1,130 +1,116 @@
+class_name CarVisual
 extends Node3D
 
-func bind_wheels() -> Dictionary:
-	_fix_materials($Model)
-	transform = Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO)
-	var front_left := _bake($Model.get_node("SportsCar_FrontLeftWheel"), 0)
-	var front_right := _bake($Model.get_node("SportsCar_FrontRightWheel"), 0)
-	if front_left["center"].x > front_right["center"].x:
-		var swap := front_left
-		front_left = front_right
-		front_right = swap
-	var rear_source: MeshInstance3D = $Model.get_node("SportsCar_BackWheels")
-	var rear_left := _bake(rear_source, -1)
-	var rear_right := _bake(rear_source, 1)
-	rear_source.visible = false
-	rear_source.queue_free()
-	return {
-		"front_left": front_left,
-		"front_right": front_right,
-		"rear_left": rear_left,
-		"rear_right": rear_right,
-	}
+# Generated visual scenes bind these roles explicitly, independent of asset names.
+@export var wheels: Array[MeshInstance3D] = [] # FL, FR, RL, RR
+@export var wheel_radii := PackedFloat32Array()
+@export var wheel_widths := PackedFloat32Array()
+@export var tail_lamps: Array[MeshInstance3D] = []
+@export var brake_lamps: Array[MeshInstance3D] = []
+@export var reverse_lamps: Array[MeshInstance3D] = []
 
-# Local transforms also work before scene-tree entry, when the spawn is prepared.
-func to_car_space(node: Node3D) -> Transform3D:
-	var result := node.transform
+var _paint: Array[StandardMaterial3D] = []
+var _tail: Array[StandardMaterial3D] = []
+var _brake: Array[StandardMaterial3D] = []
+var _reverse: Array[StandardMaterial3D] = []
+var _materials_prepared := false
+
+func validation_error() -> String:
+	if wheels.size() != 4 or wheel_radii.size() != 4 or wheel_widths.size() != 4:
+		return "CarVisual requires four wheel bindings and dimensions in FL, FR, RL, RR order."
+	var unique := {}
+	for i in 4:
+		var wheel := wheels[i]
+		if not is_instance_valid(wheel) or wheel.mesh == null or not is_ancestor_of(wheel) or unique.has(wheel):
+			return "CarVisual wheel bindings must reference four distinct descendant meshes."
+		unique[wheel] = true
+		if not is_finite(wheel_radii[i]) or not is_finite(wheel_widths[i]) or wheel_radii[i] <= 0 or wheel_widths[i] <= 0:
+			return "CarVisual wheel dimensions must be positive metres."
+		var pose := _local_pose(wheel)
+		if not pose.basis.is_equal_approx(Basis.IDENTITY):
+			return "Wheel meshes must have positive unit scale, zero rotation and hub-centred geometry."
+		if wheel.mesh.get_aabb().get_center().length() > 0.001:
+			return "Wheel mesh origins must be at their hub centres."
+		if (pose.origin.x < 0) != (i % 2 == 0):
+			return "Wheel bindings must be ordered FL, FR, RL, RR in -Z-forward coordinates."
+	for i in 2:
+		if not is_equal_approx(wheel_radii[i * 2], wheel_radii[i * 2 + 1]) or not is_equal_approx(wheel_widths[i * 2], wheel_widths[i * 2 + 1]):
+			return "GEVP requires matching tire dimensions on each axle."
+	if _local_pose(wheels[0]).origin.z >= _local_pose(wheels[2]).origin.z:
+		return "Front wheel mounts must precede rear mounts along -Z."
+	for lamps in [tail_lamps, brake_lamps, reverse_lamps]:
+		if lamps.is_empty():
+			return "CarVisual requires tail, brake and reverse lamp bindings."
+		for lamp in lamps:
+			if not is_instance_valid(lamp) or lamp.mesh == null or not is_ancestor_of(lamp) or unique.has(lamp):
+				return "Lamp bindings must reference distinct descendant meshes."
+			unique[lamp] = true
+			for surface in lamp.mesh.get_surface_count():
+				if not lamp.get_active_material(surface) is StandardMaterial3D:
+					return "Lamp meshes require StandardMaterial3D materials."
+	var has_paint := false
+	for mesh: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
+		if mesh.mesh == null:
+			return "CarVisual mesh bindings require mesh resources."
+		for surface in mesh.mesh.get_surface_count():
+			var material := mesh.get_active_material(surface)
+			has_paint = has_paint or (material is StandardMaterial3D and material.resource_name == "Paint")
+	if not has_paint:
+		return "CarVisual requires a material with the semantic role Paint."
+	return ""
+
+func configure(color: Color) -> void:
+	if not _materials_prepared:
+		_collect_paint(self)
+		_tail = _lamp_materials(tail_lamps, Color(1.0, 0.015, 0.025))
+		_brake = _lamp_materials(brake_lamps, Color(1.0, 0.015, 0.025))
+		_reverse = _lamp_materials(reverse_lamps, Color(1.0, 0.96, 0.85))
+		_materials_prepared = true
+		set_lights(0.0, false)
+	for material in _paint:
+		material.albedo_color = Color(color, 1.0)
+
+func wheel_bindings() -> Array[Dictionary]:
+	var bindings: Array[Dictionary] = []
+	for i in 4:
+		bindings.append({"pivot": wheels[i], "center": _local_pose(wheels[i]).origin, "radius": wheel_radii[i], "width": wheel_widths[i]})
+	return bindings
+
+func set_lights(braking: float, reversing: bool) -> void:
+	for material in _tail:
+		material.emission_energy_multiplier = 0.35
+	for material in _brake:
+		material.emission_energy_multiplier = 3.0 * clampf(braking, 0.0, 1.0)
+	for material in _reverse:
+		material.emission_energy_multiplier = 1.5 if reversing else 0.0
+
+# Compose local transforms before scene entry; no global-transform dependency.
+func _local_pose(node: Node3D) -> Transform3D:
+	var pose := node.transform
 	var ancestor := node.get_parent() as Node3D
-	while ancestor != get_parent():
-		result = ancestor.transform * result
+	while ancestor != self:
+		pose = ancestor.transform * pose
 		ancestor = ancestor.get_parent() as Node3D
-	return result
+	return transform * pose
 
-func _bake(source: MeshInstance3D, side: int) -> Dictionary:
-	var to_body := to_car_space(source)
-	var normal_basis := to_body.basis.inverse().transposed()
-	var mesh := source.mesh as ArrayMesh
-	var kept: Array[Dictionary] = []
-	var minimum := Vector3(INF, INF, INF)
-	var maximum := Vector3(-INF, -INF, -INF)
-	for surface in mesh.get_surface_count():
-		var arrays := mesh.surface_get_arrays(surface)
-		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL] if arrays[Mesh.ARRAY_NORMAL] != null else PackedVector3Array()
-		var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV] if arrays[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
-		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
-		if indices.is_empty():
-			for index in vertices.size():
-				indices.append(index)
-		for index in range(0, indices.size(), 3):
-			var points: Array[Vector3] = []
-			var centroid := Vector3.ZERO
-			for corner in 3:
-				var point: Vector3 = to_body * vertices[indices[index + corner]]
-				points.append(point)
-				centroid += point
-			centroid /= 3.0
-			if side != 0 and signf(centroid.x) != float(side):
-				continue
-			var record := {"points": points, "surface": surface}
-			if not normals.is_empty():
-				var face_normals: Array[Vector3] = []
-				for corner in 3:
-					face_normals.append((normal_basis * normals[indices[index + corner]]).normalized())
-				record["normals"] = face_normals
-			if not uvs.is_empty():
-				var face_uvs: Array[Vector2] = []
-				for corner in 3:
-					face_uvs.append(uvs[indices[index + corner]])
-				record["uvs"] = face_uvs
-			kept.append(record)
-			for point in points:
-				minimum = minimum.min(point)
-				maximum = maximum.max(point)
-	var center := (minimum + maximum) * 0.5
-	var size := maximum - minimum
-	var baked := ArrayMesh.new()
-	var by_surface: Dictionary = {}
-	for record in kept:
-		var surface: int = record["surface"]
-		if not by_surface.has(surface):
-			by_surface[surface] = {"vertices": PackedVector3Array(), "normals": PackedVector3Array(), "uvs": PackedVector2Array(), "indices": PackedInt32Array()}
-		var bucket: Dictionary = by_surface[surface]
-		var vertices: PackedVector3Array = bucket["vertices"]
-		var base := vertices.size()
-		var points: Array = record["points"]
-		for corner in 3:
-			vertices.append(points[corner] - center)
-			bucket["indices"].append(base + corner)
-		bucket["vertices"] = vertices
-		if record.has("normals"):
-			var normals: PackedVector3Array = bucket["normals"]
-			for normal in record["normals"]:
-				normals.append(normal)
-			bucket["normals"] = normals
-		if record.has("uvs"):
-			var uvs: PackedVector2Array = bucket["uvs"]
-			for uv in record["uvs"]:
-				uvs.append(uv)
-			bucket["uvs"] = uvs
-	for surface in by_surface:
-		var bucket: Dictionary = by_surface[surface]
-		var arrays: Array = []
-		arrays.resize(Mesh.ARRAY_MAX)
-		arrays[Mesh.ARRAY_VERTEX] = bucket["vertices"]
-		if not (bucket["normals"] as PackedVector3Array).is_empty():
-			arrays[Mesh.ARRAY_NORMAL] = bucket["normals"]
-		if not (bucket["uvs"] as PackedVector2Array).is_empty():
-			arrays[Mesh.ARRAY_TEX_UV] = bucket["uvs"]
-		arrays[Mesh.ARRAY_INDEX] = bucket["indices"]
-		baked.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		baked.surface_set_material(baked.get_surface_count() - 1, source.get_active_material(surface))
-	if side == 0:
-		source.visible = false
-		source.queue_free()
-	return {"mesh": baked, "center": center, "radius": maxf(size.y, size.z) * 0.5, "width": size.x}
-
-func _fix_materials(node: Node) -> void:
+func _collect_paint(node: Node) -> void:
 	if node is MeshInstance3D:
-		var mesh_instance := node as MeshInstance3D
-		var mesh := mesh_instance.mesh
-		if mesh:
-			for surface in mesh.get_surface_count():
-				var material := mesh_instance.get_active_material(surface)
-				if material is StandardMaterial3D:
-					var copy := material.duplicate() as StandardMaterial3D
-					copy.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
-					copy.albedo_color.a = 1.0
-					mesh_instance.set_surface_override_material(surface, copy)
+		for surface in node.mesh.get_surface_count():
+			var source: Material = node.get_active_material(surface)
+			if source is StandardMaterial3D and source.resource_name == "Paint":
+				var material := source.duplicate() as StandardMaterial3D
+				node.set_surface_override_material(surface, material)
+				_paint.append(material)
 	for child in node.get_children():
-		_fix_materials(child)
+		_collect_paint(child)
+
+func _lamp_materials(lamps: Array[MeshInstance3D], color: Color) -> Array[StandardMaterial3D]:
+	var materials: Array[StandardMaterial3D] = []
+	for lamp in lamps:
+		for surface in lamp.mesh.get_surface_count():
+			var material := lamp.get_active_material(surface).duplicate() as StandardMaterial3D
+			material.emission_enabled = true
+			material.emission = color
+			lamp.set_surface_override_material(surface, material)
+			materials.append(material)
+	return materials

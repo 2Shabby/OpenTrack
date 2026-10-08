@@ -1,9 +1,9 @@
 /target/
 .godot/
+__pycache__/
 /bin/*.dylib
 /extensions/ot_sim/build/
 /extensions/godot-cpp/
 /extensions/JoltPhysics/
 /extensions/ot_sim/extension_api.json
 /extensions/ot_sim/gdextension_interface.h
-

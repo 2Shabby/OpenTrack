@@ -10,8 +10,10 @@ The live game uses GDScript, Godot 4.7.2 and built-in Jolt at 120 physics ticks/
 - `road_shoulders.gd` joins the road's exact cross-section edges to terrain triangles with closed grass strips, including the start and finish borders.
 - `track_geometry.gd` builds native road, shoulder and green terrain bodies using identical rendering/collision triangles. Every body has exactly one recognized surface group. There are no rails.
 - `addons/gevp/scripts/vehicle.gd` and `wheel.gd` own suspension, brush tire forces, wheel rotation, steering, AWD drivetrain, automatic transmission and force application. Jolt integrates the rigid body and resolves chassis collisions.
-- `car.gd` binds game inputs, material profiles, measured wheel/chassis geometry, spawn and telemetry to the library. It never anchors height, projects velocity or sets body yaw during driving.
-- `car_visual.gd` transforms the imported mesh into the vehicle's local frame and splits the combined rear-wheel mesh. Four independent wheel pivots use library suspension and spin. Local transform composition works before scene entry.
+- `car.gd` validates the shared car rig and binds game inputs, material profiles, exported wheel geometry, spawn and telemetry to the library. It never anchors height, projects velocity or sets body yaw during driving.
+- `car_visual.gd` binds four authored wheel pivots, instance paint and rear lamps. GEVP controls suspension, steering and spin; lamp state follows actual braking and gear. Local transform composition works before scene entry.
+- `base_car.tscn` supplies the reusable vehicle rig. Per-car inherited scenes supply GEVP tuning, convex/primitive chassis collision and a conforming visual scene. `Game.car_scene` selects the model and hotseat supplies a stable driver color.
+- `tools/voxel_car.py` exports labelled VOX sources into GLB/visual scenes offline. The original hatchback replaces the FBX model and all SportsCar-specific repairs.
 - `world.gd` owns timing, progress, recovery, retry, hotseat bests and camera updates. The HUD consumes this state.
 - Setup/pause share native menu controls. Scene transitions clear tree pause and detach the old world before deletion.
 
@@ -29,4 +31,4 @@ Pause uses SceneTree.paused, with an always-processing pause menu/input handler.
 
 GEVP is vendored at `c392257f54f6ca537dc10bc5badad0c060f18982`. `addons/gevp/UPSTREAM.txt` records two wheel integration fixes: initial position/spring history and body-relative force offsets. The MIT license and upstream README are retained. Demo controllers, scenes and effects are excluded.
 
-See [VehicleHandling.md](VehicleHandling.md) for tuning and verification, and [RallyStages.md](RallyStages.md) for generation. Historical Rust handling/collision audits do not describe the live implementation.
+See [VehicleHandling.md](VehicleHandling.md) for tuning and verification, [VoxelCars.md](VoxelCars.md) for the asset contract, and [RallyStages.md](RallyStages.md) for generation. Historical Rust handling/collision audits do not describe the live implementation.

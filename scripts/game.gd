@@ -15,6 +15,10 @@ var stage_length: int = 1200
 var terrain_settings: Resource = preload("res://resources/terrain_settings.tres").duplicate()
 var player_count: int = 2
 var setup_error := ""
+var car_scene: PackedScene = preload("res://scenes/cars/rally_hatchback.tscn")
+
+func player_color(index: int) -> Color:
+	return Color.from_hsv(fposmod(0.58 + index * 0.61803398875, 1.0), 0.72, 0.92)
 
 func player_name() -> String:
 	if players.is_empty():
