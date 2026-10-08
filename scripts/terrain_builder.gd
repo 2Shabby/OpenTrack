@@ -12,6 +12,7 @@ var _noise := FastNoiseLite.new()
 var _segments: Dictionary = {}
 var _neighbors := PackedVector3Array()
 var _config: Resource
+var _road_caps := PackedFloat32Array()
 
 func apply(stage: Resource, config: Resource) -> bool:
 	if not config.valid():
@@ -193,9 +194,25 @@ func _heightfield(stage: Resource) -> Resource:
 	return field
 
 func _limit_terrain_slopes(field: Resource) -> void:
-	# A lowering-only distance transform preserves the road clearance caps.
-	# Four raster directions cover all quadrants. Bounding both axis slopes
-	# by gradient/sqrt(2) bounds either triangle's full gradient as well.
+	# Anchor the road corridor first. Its upper envelope resolves nearby road
+	# constraints; the matching lower envelope makes the surrounding terrain fill
+	# up to that corridor rather than pulling it down into distant valleys.
+	var ceiling := _road_caps.duplicate()
+	_slope_envelope(field, ceiling, false)
+	var floor_heights := PackedFloat32Array()
+	floor_heights.resize(field.heights.size())
+	floor_heights.fill(-INF)
+	for i in _road_caps.size():
+		if is_finite(_road_caps[i]):
+			floor_heights[i] = ceiling[i]
+	_slope_envelope(field, floor_heights, true)
+	for i in field.heights.size():
+		field.heights[i] = clampf(field.heights[i], floor_heights[i], ceiling[i])
+	# The lower envelope is already slope-limited, so this final cut cannot go
+	# below it. Road anchors remain fixed while cuts and fills extend as needed.
+	_slope_envelope(field, field.heights, false)
+
+func _slope_envelope(field: Resource, heights: PackedFloat32Array, raising: bool) -> void:
 	var step := MAX_TERRAIN_GRADIENT * Field.SPACING / sqrt(2.0)
 	for direction: Vector2i in [Vector2i(1, 1), Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1)]:
 		var z_start: int = 0 if direction.y > 0 else field.size.y - 1
@@ -206,13 +223,17 @@ func _limit_terrain_slopes(field: Resource) -> void:
 			for x in range(x_start, x_end, direction.x):
 				var i: int = z * field.size.x + x
 				if x != x_start:
-					field.heights[i] = minf(field.heights[i], field.heights[i - direction.x] + step)
+					var neighbor := heights[i - direction.x]
+					heights[i] = maxf(heights[i], neighbor - step) if raising else minf(heights[i], neighbor + step)
 				if z != z_start:
-					field.heights[i] = minf(field.heights[i], field.heights[i - direction.y * field.size.x] + step)
+					var neighbor := heights[i - direction.y * field.size.x]
+					heights[i] = maxf(heights[i], neighbor - step) if raising else minf(heights[i], neighbor + step)
 
 func _cap_road_cells(stage: Resource, field: Resource) -> void:
-	# Each cell intersecting a road triangle is kept below that triangle's
-	# extended plane. This also protects edges from coarse-grid interpolation.
+	_road_caps.resize(field.heights.size())
+	_road_caps.fill(INF)
+	# Only intersecting cells receive constraints. All four cell vertices are
+	# capped to keep their interpolated triangles below the actual road plane.
 	for i in range(stage.centers.size() - 1):
 		_cap_triangle(field, stage.left_edges[i], stage.right_edges[i], stage.left_edges[i + 1])
 		_cap_triangle(field, stage.right_edges[i], stage.right_edges[i + 1], stage.left_edges[i + 1])
@@ -222,13 +243,35 @@ func _cap_triangle(field: Resource, a: Vector3, b: Vector3, c: Vector3) -> void:
 	var first := Vector2(minf(a.x, minf(b.x, c.x)), minf(a.z, minf(b.z, c.z)))
 	var last := Vector2(maxf(a.x, maxf(b.x, c.x)), maxf(a.z, maxf(b.z, c.z)))
 	var begin := Vector2i((first - field.origin) / Field.SPACING)
-	var end := Vector2i((last - field.origin) / Field.SPACING) + Vector2i.ONE
-	for z in range(maxi(0, begin.y), mini(field.size.y - 1, end.y) + 1):
-		for x in range(maxi(0, begin.x), mini(field.size.x - 1, end.x) + 1):
-			var point: Vector2 = field.origin + Vector2(x, z) * Field.SPACING
-			var height := a.y - (up.x * (point.x - a.x) + up.z * (point.y - a.z)) / up.y - Field.ROAD_CLEARANCE
-			var index: int = z * field.size.x + x
-			field.heights[index] = minf(field.heights[index], height)
+	var end := Vector2i((last - field.origin) / Field.SPACING)
+	var triangle: Array[Vector2] = [Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z)]
+	var axes: Array[Vector4] = []
+	for i in 3:
+		var edge := triangle[(i + 1) % 3] - triangle[i]
+		var axis := Vector2(-edge.y, edge.x)
+		var pa := axis.dot(triangle[0])
+		var pb := axis.dot(triangle[1])
+		var pc := axis.dot(triangle[2])
+		axes.append(Vector4(axis.x, axis.y, minf(pa, minf(pb, pc)), maxf(pa, maxf(pb, pc))))
+	for z in range(maxi(0, begin.y), mini(field.size.y - 2, end.y) + 1):
+		for x in range(maxi(0, begin.x), mini(field.size.x - 2, end.x) + 1):
+			var midpoint: Vector2 = field.origin + (Vector2(x, z) + Vector2.ONE * 0.5) * Field.SPACING
+			if not _cell_intersects_triangle(midpoint, axes):
+				continue
+			for corner: Vector2i in [Vector2i(x, z), Vector2i(x + 1, z), Vector2i(x, z + 1), Vector2i(x + 1, z + 1)]:
+				var point: Vector2 = field.origin + Vector2(corner) * Field.SPACING
+				var height := a.y - (up.x * (point.x - a.x) + up.z * (point.y - a.z)) / up.y - Field.ROAD_CLEARANCE
+				var index: int = corner.y * field.size.x + corner.x
+				_road_caps[index] = minf(_road_caps[index], height)
+				field.heights[index] = minf(field.heights[index], height)
+
+func _cell_intersects_triangle(midpoint: Vector2, axes: Array[Vector4]) -> bool:
+	for axis in axes:
+		var projection := axis.x * midpoint.x + axis.y * midpoint.y
+		var radius := (absf(axis.x) + absf(axis.y)) * Field.SPACING * 0.5
+		if projection + radius < axis.z - EPSILON or projection - radius > axis.w + EPSILON:
+			return false
+	return true
 
 func _terrain_is_gentle(field: Resource) -> bool:
 	for z in range(field.size.y - 1):

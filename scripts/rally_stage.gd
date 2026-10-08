@@ -2,7 +2,7 @@ class_name RallyStage
 extends Resource
 
 # The recipe, rendered road, collision road and pacenotes share these stations.
-@export var generator_version := "rally-terrain-v2"
+@export var generator_version := "rally-terrain-v3"
 @export var engine_version: String = Engine.get_version_info()["string"]
 @export var seed_value := 0
 @export var length_m := 0.0

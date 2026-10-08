@@ -13,6 +13,7 @@ const SURFACES: Array[SurfaceProfile] = [
 const GRASS: SurfaceProfile = SURFACES[2]
 const FINISH_MATERIAL := preload("res://materials/finish.tres")
 const Field := preload("res://scripts/terrain_field.gd")
+const Shoulders := preload("res://scripts/road_shoulders.gd")
 
 func build(stage: Resource) -> void:
 	for piece: Dictionary in stage.pieces():
@@ -31,7 +32,18 @@ func build(stage: Resource) -> void:
 		_add_surface(road_mesh, shape, profile, ROAD_LAYER)
 		if piece.has("finish"):
 			_add_finish_marker(piece["finish"], stage.ROAD_WIDTH)
+	_add_shoulders(stage)
 	_add_ground(stage.terrain)
+
+func _add_shoulders(stage: Resource) -> void:
+	var shoulders := Node3D.new()
+	shoulders.name = "Shoulders"
+	add_child(shoulders)
+	var meshes: Array[ArrayMesh] = Shoulders.new().build(stage)
+	for mesh in meshes:
+		mesh.surface_set_material(0, GRASS.material)
+		var body := _add_surface(mesh, mesh.create_trimesh_shape(), GRASS, TERRAIN_LAYER)
+		body.reparent(shoulders)
 
 func _add_ground(field: Resource) -> void:
 	var ground := Node3D.new()

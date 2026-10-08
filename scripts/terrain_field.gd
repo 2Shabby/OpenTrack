@@ -37,6 +37,17 @@ func height_at(position: Vector2) -> float:
 	# Match the rendered/collision diagonal, rather than bilinear interpolation.
 	return a + t.x * (b - a) + t.y * (c - a) if t.x + t.y <= 1 else d + (1 - t.x) * (c - d) + (1 - t.y) * (b - d)
 
+func normal_at(position: Vector2) -> Vector3:
+	var grid := (position - origin) / SPACING
+	var x := clampi(floori(grid.x), 0, size.x - 2)
+	var z := clampi(floori(grid.y), 0, size.y - 2)
+	var t := grid - Vector2(x, z)
+	var a := normal(x, z)
+	var b := normal(x + 1, z)
+	var c := normal(x, z + 1)
+	var d := normal(x + 1, z + 1)
+	return (a + t.x * (b - a) + t.y * (c - a)).normalized() if t.x + t.y <= 1 else (d + (1 - t.x) * (c - d) + (1 - t.y) * (b - d)).normalized()
+
 func chunk_mesh(first: Vector2i, cells: Vector2i) -> ArrayMesh:
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()

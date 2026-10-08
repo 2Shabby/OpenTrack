@@ -4,6 +4,7 @@ const Generator := preload("res://scripts/rally_generator.gd")
 const Terrain := preload("res://scripts/terrain_builder.gd")
 const Settings := preload("res://scripts/terrain_settings.gd")
 const Field := preload("res://scripts/terrain_field.gd")
+const Shoulders := preload("res://scripts/road_shoulders.gd")
 const DT := 1.0 / 120.0
 var failures := 0
 
@@ -18,6 +19,11 @@ func _check(condition: bool, label: String) -> void:
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	_check(Engine.physics_ticks_per_second == 120, "native vehicle runs at 120 Hz")
+	if "--shoulders-only" in args:
+		await _test_shoulders()
+		print("shoulder smoke: ", failures, " failures")
+		quit(0 if failures == 0 else 1)
+		return
 	if not "--vehicle-only" in args and not "--stages-only" in args:
 		_test_constraints()
 		await _test_terrain_controls()
@@ -25,6 +31,7 @@ func _run() -> void:
 			_test_generation()
 	if not "--terrain-controls" in args:
 		if not "--stages-only" in args:
+			await _test_shoulders()
 			await _test_vehicle()
 			await _test_surfaces()
 			await _test_air_and_collisions()
@@ -60,7 +67,7 @@ func _test_terrain_controls() -> void:
 	setup.queue_free()
 	await process_frame
 
-func _check_terrain(stage: Resource) -> void:
+func _check_terrain(stage: Resource) -> float:
 	var min_height := INF
 	var max_height := -INF
 	var previous_grade := 0.0
@@ -87,6 +94,11 @@ func _check_terrain(stage: Resource) -> void:
 			_check(absf(grade - previous_grade) <= Terrain.MAX_GRADE_CHANGE * (length + previous_length) * 0.5 + 0.00002, "road crests obey grade-change limit")
 		previous_grade = grade
 		previous_length = length
+		for edges: PackedVector3Array in [stage.left_edges, stage.right_edges]:
+			for t: float in [0, 0.5, 1]:
+				var point := edges[i - 1].lerp(edges[i], t)
+				var gap: float = point.y - stage.terrain.height_at(Vector2(point.x, point.z))
+				_check(gap >= Field.ROAD_CLEARANCE - 0.0001 and gap < 0.75, "buried road-edge clearance has lower and upper bounds")
 		for triangle: Array in [[stage.left_edges[i - 1], stage.right_edges[i - 1], stage.left_edges[i]], [stage.right_edges[i - 1], stage.right_edges[i], stage.left_edges[i]]]:
 			for weights: Vector3 in [Vector3.ONE / 3, Vector3(0.8, 0.1, 0.1), Vector3(0.1, 0.8, 0.1), Vector3(0.1, 0.1, 0.8)]:
 				var point: Vector3 = triangle[0] * weights.x + triangle[1] * weights.y + triangle[2] * weights.z
@@ -97,6 +109,106 @@ func _check_terrain(stage: Resource) -> void:
 		_check(pieces[i - 1]["vertices"][-2] == pieces[i]["vertices"][0] and pieces[i - 1]["vertices"][-1] == pieces[i]["vertices"][1], "road pieces share exact boundary vertices")
 		_check(pieces[i - 1]["normals"][-2] == pieces[i]["normals"][0] and pieces[i - 1]["normals"][-1] == pieces[i]["normals"][1], "road pieces share exact boundary normals")
 	_check(Terrain.new()._terrain_is_gentle(stage.terrain), "terrain has no cut-and-fill cliffs")
+	return _check_shoulders(stage)
+
+func _check_shoulders(stage: Resource) -> float:
+	var meshes: Array[ArrayMesh] = Shoulders.new().build(stage)
+	var max_grade := 0.0
+	var max_seam_error := 0.0
+	var invalid_faces := 0
+	var side_ends: Array[PackedVector3Array] = []
+	for side in meshes.size():
+		var arrays := meshes[side].surface_get_arrays(0)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var joints := {}
+		for i in range(0, vertices.size(), 2):
+			joints[vertices[i]] = true
+			if i == 0:
+				continue
+			for t: float in [0, 0.25, 0.5, 0.75, 1]:
+				var point := vertices[i - 1].lerp(vertices[i + 1], t)
+				var height: float = stage.terrain.height_at(Vector2(point.x, point.z))
+				max_seam_error = maxf(max_seam_error, absf(point.y - height))
+		if side < 2:
+			var edges: PackedVector3Array = stage.left_edges if side == 0 else stage.right_edges
+			for edge in edges:
+				_check(joints.has(edge), "grass shares exact road cross-section boundary vertices")
+			side_ends.append(PackedVector3Array([vertices[0], vertices[1], vertices[-2], vertices[-1]]))
+		else:
+			var end := (side - 2) * 2
+			_check(vertices[0] == side_ends[0][end] and vertices[1] == side_ends[0][end + 1] and vertices[-2] == side_ends[1][end] and vertices[-1] == side_ends[1][end + 1], "start and finish shoulders close both side strips with exact corner vertices")
+		for i in range(0, indices.size(), 3):
+			var a := vertices[indices[i]]
+			var b := vertices[indices[i + 1]]
+			var c := vertices[indices[i + 2]]
+			var normal := (b - a).cross(c - a)
+			if normal.y >= 0:
+				invalid_faces += 1
+			elif absf(normal.y) > 0.0001:
+				max_grade = maxf(max_grade, Vector2(normal.x, normal.z).length() / absf(normal.y))
+	_check(invalid_faces == 0, "shoulders have valid clockwise triangles")
+	_check(max_seam_error < 0.001, "outer shoulder edges conform to terrain cell edges and diagonals")
+	_check(max_grade <= Terrain.MAX_TERRAIN_GRADIENT + 0.005, "grass verge triangles have no steep cut-and-fill cliffs: %.3f" % max_grade)
+	return max_grade
+
+func _test_shoulders() -> void:
+	var stage: Resource
+	for seed_value: int in [0, 1, 1492, 1592598566]:
+		stage = Generator.new().generate(seed_value, 1200, Settings.new())
+		_check(stage != null, "shoulder regression seed generates: %s" % seed_value)
+		if stage != null:
+			print("shoulder seed ", seed_value, " maximum verge grade ", _check_terrain(stage))
+	if stage == null:
+		return
+	var track := _track(stage)
+	await _frames(3)
+	# The old 4.45 m depression was here, in the default first tight corner.
+	for edges: PackedVector3Array in [stage.left_edges, stage.right_edges]:
+		var edge := edges[49]
+		var outward: Vector3 = (edge - stage.centers[49]).normalized()
+		for offset: float in [-0.02, 0.02, 0.25, 1.0, 2.0, 2.02, 3.0]:
+			var point := edge + outward * offset
+			var hit := _support_hit(track, point)
+			_check(not hit.is_empty(), "native support spans former shoulder gap")
+			if hit.is_empty():
+				continue
+			var height: float = hit["position"].y
+			if absf(offset) <= 0.02:
+				_check(absf(height - edge.y) < 0.015, "native road/grass boundary is continuous")
+			if offset > 0:
+				_check(hit["collider"].get_meta("surface") == TrackGeometry.GRASS, "connected shoulder uses native Grass contacts")
+			if offset >= Shoulders.WIDTH:
+				var field_height: float = stage.terrain.height_at(Vector2(point.x, point.z))
+				_check(absf(height - field_height) < 0.002, "native outer shoulder joint matches terrain collision")
+		for direction: float in [1, -1]:
+			var forward := outward * direction
+			var start := edge - forward * 3
+			var hit := _support_hit(track, start)
+			start.y = hit["position"].y
+			var pose := Transform3D(Basis(Vector3.UP.cross(forward), Vector3.UP, forward), start)
+			var car := _new_car(pose)
+			await _frames(120)
+			car.linear_velocity = forward * 5
+			for wheel: Wheel in car.wheel_array:
+				wheel.spin = 5 / wheel.tire_radius
+			car.throttle_input = 0.4
+			var air_ticks := 0
+			var crossed := false
+			for _i in 240:
+				await physics_frame
+				air_ticks += 1 if car.airborne() else 0
+				if (car.global_position - edge).dot(forward) > 1:
+					crossed = true
+					break
+			_check(crossed and air_ticks < 6 and car.global_transform.is_finite(), "native car crosses default verge in direction %s without falling through" % direction)
+			print("native verge crossing ", direction, " crossed ", crossed, " air ticks ", air_ticks)
+			await _dispose([car])
+	await _dispose([track])
+
+func _support_hit(track: Node3D, point: Vector3) -> Dictionary:
+	var query := PhysicsRayQueryParameters3D.create(point + Vector3.UP * 10, point - Vector3.UP * 10, TrackGeometry.SUPPORT_MASK)
+	return track.get_world_3d().direct_space_state.intersect_ray(query)
 
 func _test_constraints() -> void:
 	var settings := Settings.new()

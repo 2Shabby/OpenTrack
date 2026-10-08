@@ -7,7 +7,8 @@ The live game uses GDScript, Godot 4.7.2 and built-in Jolt at 120 physics ticks/
 - `rally_generator.gd` builds a seeded native stage Resource with distance-based straight/corner features and shared cross-sections.
 - `terrain_builder.gd` drapes those cross-sections over constrained native noise and stamps a shared terrain heightfield. The route has no splines or banking.
 - `rally_stage.gd` derives mesh sections, distance projection, pitched spawn and swept finish gate, and pacenotes from that Resource.
-- `track_geometry.gd` builds native road and green terrain bodies using identical rendering/collision triangles. Every body has exactly one recognized surface group. There are no rails.
+- `road_shoulders.gd` joins the road's exact cross-section edges to terrain triangles with closed grass strips, including the start and finish borders.
+- `track_geometry.gd` builds native road, shoulder and green terrain bodies using identical rendering/collision triangles. Every body has exactly one recognized surface group. There are no rails.
 - `addons/gevp/scripts/vehicle.gd` and `wheel.gd` own suspension, brush tire forces, wheel rotation, steering, AWD drivetrain, automatic transmission and force application. Jolt integrates the rigid body and resolves chassis collisions.
 - `car.gd` binds game inputs, material profiles, measured wheel/chassis geometry, spawn and telemetry to the library. It never anchors height, projects velocity or sets body yaw during driving.
 - `car_visual.gd` transforms the imported mesh into the vehicle's local frame and splits the combined rear-wheel mesh. Four independent wheel pivots use library suspension and spin. Local transform composition works before scene entry.
