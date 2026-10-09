@@ -20,7 +20,7 @@ func _start_race() -> void:
 	var world := _replace_content(preload("res://scenes/world.tscn"), Game.State.DRIVING)
 	world.open_setup.connect(_show_setup)
 	world.open_menu.connect(_show_menu)
-	if not world.start_race(Game.seed_value, Game.stage_length):
+	if not await world.start_race():
 		_show_setup()
 
 func _replace_content(scene: PackedScene, state: int) -> Node:

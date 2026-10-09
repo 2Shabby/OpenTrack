@@ -14,7 +14,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.02, 0.03, 0.03, 0.55)
+color = Color(0.09411764706, 0.07843137255, 0.1450980392, 0.55)
 
 [node name="Menu" parent="." instance=ExtResource("2")]
 

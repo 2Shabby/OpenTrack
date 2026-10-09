@@ -13,14 +13,17 @@ func _capture(name: String) -> void:
 
 func _run() -> void:
 	var game := root.get_node("Game")
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--vehicle="):
+			game.car_scene = load(argument.trim_prefix("--vehicle="))
 	var studio := Node3D.new()
 	root.add_child(studio)
 	var environment := WorldEnvironment.new()
 	environment.environment = Environment.new()
 	environment.environment.background_mode = Environment.BG_COLOR
-	environment.environment.background_color = Color(0.12, 0.15, 0.18)
+	environment.environment.background_color = Palette.color(24)
 	environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.environment.ambient_light_color = Color.WHITE
+	environment.environment.ambient_light_color = Palette.color(19)
 	environment.environment.ambient_light_energy = 0.65
 	studio.add_child(environment)
 	var light := DirectionalLight3D.new()
@@ -41,14 +44,14 @@ func _run() -> void:
 	floor_mesh.mesh = BoxMesh.new()
 	floor_mesh.mesh.size = floor_shape.shape.size
 	var floor_material := StandardMaterial3D.new()
-	floor_material.albedo_color = Color(0.23, 0.26, 0.28)
+	floor_material.albedo_color = Palette.color(23)
 	floor_mesh.material_override = floor_material
 	floor_body.add_child(floor_mesh)
 	var cars: Array[RallyCar] = []
 	for i in 2:
 		var car: RallyCar = game.car_scene.instantiate()
 		car.accept_input = false
-		car.configure(game.player_color(i))
+		car.configure(game.player_paint_index(i))
 		if not car.place_at(Transform3D(Basis.IDENTITY, Vector3(-1.8 + i * 3.6, 0, 0))):
 			push_error(car.configuration_error)
 			quit(1)

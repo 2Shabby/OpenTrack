@@ -10,5 +10,15 @@ Local changes in scripts/wheel.gd:
 - Initialize visual spring length at full extension.
 - Pass body-relative world offsets to apply_force for the wheel torque couple,
   as required by Godot's RigidBody3D API.
+- Apply rolling drag separately from tire reaction torque so coasting tires do
+  not cancel surface resistance. Limit drag to the contact's stopping impulse
+  to avoid reversing motion near zero speed.
+
+Local changes in scripts/vehicle.gd:
+- Support an optional front_center_wheel instead of the front pair. Shared
+  axle processing handles one front wheel or the original pair, including
+  weight, spring/damping rates, brakes, drivetrain, steering and center of mass.
+  The centered wheel has no opposite wheel, antiroll or Ackermann correction.
+  Existing four-wheel scenes retain their original layout and tuning.
 
 Formatting: removed trailing whitespace in both scripts; no behavior change.

@@ -7,3 +7,8 @@ __pycache__/
 /extensions/JoltPhysics/
 /extensions/ot_sim/extension_api.json
 /extensions/ot_sim/gdextension_interface.h
+
+# Regenerated artifacts; source GPX, catalogs and road Resources are retained.
+/assets/tracks/recipes.json
+/.stage_authoring/
+/resources/stages/baked/

@@ -183,7 +183,11 @@ func process_forces(opposite_compression : float, braking : bool, delta : float)
 			vehicle.apply_force(-global_transform.basis.y * vehicle.mass, global_position - vehicle.global_position)
 
 		vehicle.apply_force(global_transform.basis.x * force_vector.x, contact)
-		vehicle.apply_force(global_transform.basis.z * force_vector.y, contact)
+		# Rolling drag dissipates body motion. Including it in force_vector also
+		# feeds it back as tire reaction torque, which spins up a coasting wheel
+		# until traction cancels the drag instead of slowing the vehicle.
+		var rolling_drag := process_rolling_resistance(delta) * signf(local_velocity.z)
+		vehicle.apply_force(global_transform.basis.z * (force_vector.y - rolling_drag), contact)
 
 		## Applies a torque on the vehicle body centered on the wheel. Gives the vehicle
 		## more weight transfer when the center of gravity is really low.
@@ -317,11 +321,12 @@ func process_tires(braking : bool, delta : float):
 	if absf(force_vector.x) > max_x_force:
 		force_vector.x = max_x_force * signf(force_vector.x)
 
-	force_vector.y -= process_rolling_resistance() * signf(local_velocity.z)
-
-func process_rolling_resistance() -> float:
+func process_rolling_resistance(delta: float) -> float:
 	var rolling_resistance_coefficient := 0.005 + (0.5 * (0.01 + (0.0095 * pow(local_velocity.z * 0.036, 2))))
-	return rolling_resistance_coefficient * spring_force * current_rolling_resistance
+	var drag := rolling_resistance_coefficient * spring_force * current_rolling_resistance
+	# Prevent resistance alone from reversing a wheel's contact-point motion
+	# in one step, including low-speed mixed-surface contacts.
+	return minf(drag, mass_over_wheel * absf(local_velocity.z) / delta)
 
 func get_reaction_torque() -> float:
 	return force_vector.y * tire_radius

@@ -82,9 +82,11 @@ pause_game={
 3d/physics_engine="Jolt Physics"
 common/physics_ticks_per_second=120
 common/physics_jitter_fix=0.0
+common/physics_interpolation=true
 jolt_physics_3d/motion_queries/use_enhanced_internal_edge_removal=true
+jolt_physics_3d/limits/max_bodies=32768
 
 [rendering]
 
 lights_and_shadows/use_physical_light_units=false
-environment/defaults/default_clear_color=Color(0.04, 0.05, 0.055, 1)
+environment/defaults/default_clear_color=Color(0.09411764706, 0.07843137255, 0.1450980392, 1)

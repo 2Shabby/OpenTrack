@@ -9,6 +9,8 @@ extends RigidBody3D
 @export var front_left_wheel : Wheel
 ## Assign this to the Wheel [RayCast3D] that is this vehicle's front right wheel.
 @export var front_right_wheel : Wheel
+## A single centered front wheel replaces the front pair for a three-wheeler.
+@export var front_center_wheel : Wheel
 ## Assign this to the Wheel [RayCast3D] that is this vehicle's rear left wheel.
 @export var rear_left_wheel : Wheel
 ## Assign this to the Wheel [RayCast3D] that is this vehicle's rear right wheel.
@@ -427,6 +429,16 @@ func _ready():
 func _integrate_forces(state : PhysicsDirectBodyState3D):
 	current_gravity = state.total_gravity
 
+func front_wheel_nodes() -> Array[Wheel]:
+	if front_center_wheel != null:
+		return [front_center_wheel]
+	return [front_left_wheel, front_right_wheel]
+
+func suspension_wheel_nodes() -> Array[Wheel]:
+	var result := front_wheel_nodes()
+	result.append_array([rear_left_wheel, rear_right_wheel])
+	return result
+
 func initialize():
 	# Check to verify that surface types are provided
 	if tire_stiffnesses.size() == 0:
@@ -459,13 +471,13 @@ func initialize():
 	max_clutch_torque = max_torque * max_clutch_torque_ratio
 
 	front_axle = Axle.new()
-	front_axle.wheels.append(front_left_wheel)
-	front_axle.wheels.append(front_right_wheel)
+	front_axle.wheels = front_wheel_nodes()
 	front_axle.torque_vectoring = front_torque_vectoring
-	front_left_wheel.opposite_wheel = front_right_wheel
-	front_left_wheel.beam_axle = 1.0 if front_beam_axle else 0.0
-	front_right_wheel.opposite_wheel = front_left_wheel
-	front_right_wheel.beam_axle = -1.0 if front_beam_axle else 0.0
+	if front_center_wheel == null:
+		front_left_wheel.opposite_wheel = front_right_wheel
+		front_left_wheel.beam_axle = 1.0 if front_beam_axle else 0.0
+		front_right_wheel.opposite_wheel = front_left_wheel
+		front_right_wheel.beam_axle = -1.0 if front_beam_axle else 0.0
 	rear_axle = Axle.new()
 	rear_axle.wheels.append(rear_left_wheel)
 	rear_axle.wheels.append(rear_right_wheel)
@@ -479,10 +491,7 @@ func initialize():
 	axles.append(front_axle)
 	axles.append(rear_axle)
 
-	wheel_array.append(front_left_wheel)
-	wheel_array.append(front_right_wheel)
-	wheel_array.append(rear_left_wheel)
-	wheel_array.append(rear_right_wheel)
+	wheel_array = suspension_wheel_nodes()
 
 	var max_tire_radius := maxf(front_tire_radius, rear_tire_radius)
 	front_axle.tire_size_correction = max_tire_radius / front_tire_radius
@@ -502,7 +511,7 @@ func initialize():
 		wheel.longitudinal_grip_ratio = longitudinal_grip_ratio
 		wheel.wheel_to_body_torque_multiplier = wheel_to_body_torque_multiplier
 
-	var front_weight_per_wheel := vehicle_mass * front_weight_distribution * 4.9
+	var front_weight_per_wheel := vehicle_mass * front_weight_distribution * 9.8 / front_axle.wheels.size()
 	var front_spring_rate := calculate_spring_rate(front_weight_per_wheel, front_spring_length, front_resting_ratio)
 	var front_damping_rate := calculate_damping(front_weight_per_wheel, front_spring_rate, front_damping_ratio)
 
@@ -513,13 +522,13 @@ func initialize():
 		wheel.steering_ratio = front_steering_ratio
 		wheel.spring_length = front_spring_length
 		wheel.spring_rate = front_spring_rate
-		wheel.antiroll = front_spring_rate * front_arb_ratio
+		wheel.antiroll = front_spring_rate * front_arb_ratio if front_axle.wheels.size() == 2 else 0.0
 		wheel.slow_bump = front_damping_rate * front_bump_damp_multiplier
 		wheel.slow_rebound = front_damping_rate * front_rebound_damp_multiplier
 		wheel.fast_bump = front_damping_rate * front_bump_damp_multiplier * 0.5
 		wheel.fast_rebound = front_damping_rate * front_rebound_damp_multiplier * 0.5
 		wheel.bump_stop_multiplier = front_bump_stop_multiplier
-		wheel.mass_over_wheel = vehicle_mass * front_weight_distribution * 0.5
+		wheel.mass_over_wheel = vehicle_mass * front_weight_distribution / front_axle.wheels.size()
 		wheel.abs_pulse_time = front_abs_pulse_time
 		wheel.abs_spin_difference_threshold = -absf(front_abs_spin_difference_threshold)
 
@@ -544,18 +553,23 @@ func initialize():
 		wheel.abs_pulse_time = rear_abs_pulse_time
 		wheel.abs_spin_difference_threshold = -absf(rear_abs_spin_difference_threshold)
 
-	var wheel_base := rear_left_wheel.position.z - front_left_wheel.position.z
-	var front_track_width := front_right_wheel.position.x - front_left_wheel.position.x
+	var wheel_base := rear_axle_position.z - front_axle_position.z
+	var front_track_width := 0.0 if front_center_wheel != null else front_right_wheel.position.x - front_left_wheel.position.x
 	var front_ackermann := (atan((wheel_base * tan(max_steering_angle)) / (wheel_base - (front_track_width * 0.5 * tan(max_steering_angle)))) / max_steering_angle) - 1.0
 	var rear_track_width := rear_right_wheel.position.x - rear_left_wheel.position.x
 	var rear_ackermann := (atan((wheel_base * tan(max_steering_angle)) / (wheel_base - (rear_track_width * 0.5 * tan(max_steering_angle)))) / max_steering_angle) - 1.0
 
-	front_left_wheel.ackermann = front_ackermann
-	front_left_wheel.rotation.z = -front_camber
-	front_left_wheel.toe = -front_toe
-	front_right_wheel.ackermann = -front_ackermann
-	front_right_wheel.rotation.z = front_camber
-	front_right_wheel.toe = front_toe
+	if front_center_wheel != null:
+		front_center_wheel.ackermann = 0.0
+		front_center_wheel.rotation.z = 0.0
+		front_center_wheel.toe = 0.0
+	else:
+		front_left_wheel.ackermann = front_ackermann
+		front_left_wheel.rotation.z = -front_camber
+		front_left_wheel.toe = -front_toe
+		front_right_wheel.ackermann = -front_ackermann
+		front_right_wheel.rotation.z = front_camber
+		front_right_wheel.toe = front_toe
 	rear_left_wheel.ackermann = rear_ackermann
 	rear_left_wheel.rotation.z = -rear_camber
 	rear_left_wheel.toe = -rear_toe
@@ -565,6 +579,7 @@ func initialize():
 
 	if front_brake_bias < 0.0:
 		var front_axle_spring_force := calculate_axle_spring_force(0.6, front_spring_length, front_spring_rate)
+		front_axle_spring_force *= front_axle.wheels.size() / 2.0
 		var total_spring_froce := front_axle_spring_force + calculate_axle_spring_force(0.4, rear_spring_length, rear_spring_rate)
 		front_brake_bias = front_axle_spring_force / total_spring_froce
 
@@ -907,6 +922,10 @@ func process_axle_drive(axle : Axle, torque : float, drive_inertia : float, delt
 		brake_force += handbrake_force
 		allow_abs = false
 
+	if axle.wheels.size() == 1:
+		axle.wheels[0].process_torque(torque, drive_inertia, brake_force * axle.brake_bias, allow_abs, delta)
+		return
+
 	## If enough torque is applied to the axle, lock to wheel speeds and add
 	## torque vectoring
 	if axle.is_drive_axle and axle.differential_lock_torque >= 0.0:
@@ -932,6 +951,9 @@ func process_axle_drive(axle : Axle, torque : float, drive_inertia : float, delt
 func process_forces(delta : float) -> void:
 	## Spring compression values are kept for antiroll bar calculations
 	for axle in axles:
+		if axle.wheels.size() == 1:
+			axle.suspension_compression_left = axle.wheels[0].process_forces(0.0, is_braking, delta)
+			continue
 		var previous_compression_left : float = axle.suspension_compression_left
 		axle.suspension_compression_left = axle.wheels[0].process_forces(axle.suspension_compression_right, is_braking, delta)
 		axle.suspension_compression_right = axle.wheels[1].process_forces(previous_compression_left, is_braking, delta)
@@ -1060,7 +1082,7 @@ func calculate_brake_force() -> void:
 	max_handbrake_force = ((friction * braking_grip_multiplier * 0.05) / average_drive_wheel_radius)
 
 func calculate_center_of_gravity(front_distribution : float) -> Vector3:
-	front_axle_position = front_left_wheel.position.lerp(front_right_wheel.position, 0.5)
+	front_axle_position = front_center_wheel.position if front_center_wheel != null else front_left_wheel.position.lerp(front_right_wheel.position, 0.5)
 	rear_axle_position = rear_left_wheel.position.lerp(rear_right_wheel.position, 0.5)
 	return lerp(rear_axle_position, front_axle_position, front_distribution)
 

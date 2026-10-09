@@ -4,3 +4,6 @@ func update_run(driver: String, drivers: int, speed: float, progress: float, len
 	%Session.text = "%s / %d drivers · %.0f km/h · %s · %d / %d m" % [driver, drivers, speed * 3.6, surface.capitalize(), roundi(progress), roundi(length_m)]
 	%Pacenote.text = note
 	%Time.text = "%s%.2f s%s" % ["Finished · " if finished else "Time · ", elapsed, " · Best %.2f s" % best if best > 0 else ""]
+
+func set_stage_name(stage_name: String, region: String) -> void:
+	%StageName.text = stage_name + (" · " + region if not region.is_empty() else "")

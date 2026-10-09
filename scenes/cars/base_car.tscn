@@ -1,18 +1,9 @@
 [gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/car.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/cars/base_vehicle.tscn" id="1"]
 [ext_resource type="Script" path="res://addons/gevp/scripts/wheel.gd" id="2"]
 
-[node name="Car" type="RigidBody3D" node_paths=PackedStringArray("front_left_wheel", "front_right_wheel", "rear_left_wheel", "rear_right_wheel")]
-collision_layer = 4
-collision_mask = 3
-continuous_cd = true
-linear_damp_mode = 1
-linear_damp = 0.0
-angular_damp_mode = 1
-angular_damp = 0.0
-process_physics_priority = -1
-script = ExtResource("1")
+[node name="Car" node_paths=PackedStringArray("front_left_wheel", "front_right_wheel", "rear_left_wheel", "rear_right_wheel") instance=ExtResource("1")]
 front_left_wheel = NodePath("WheelFrontLeft")
 front_right_wheel = NodePath("WheelFrontRight")
 rear_left_wheel = NodePath("WheelRearLeft")

@@ -1,6 +1,6 @@
 # Open Track rally direction
 
-Local hotseat rally stages on dirt and asphalt. The active pass builds readable roads from distances, corner grades and corner lengths. Unbanked roads follow gently generated terrain, replacing the old modular Trackmania layout. Ice and boost are removed from generation, handling resources, materials and texture generation.
+Local hotseat rally stages on dirt and asphalt. The active pass authors 50 complete real rally routes into saved Godot stage assets and baked worlds, selected directly or through a randomiser. Procedural roads remain an explicit test mode. Unbanked roads follow gently generated terrain, replacing the old modular Trackmania layout. Ice and boost are removed from generation, handling resources, materials and texture generation.
 
 ## Implemented foundation
 
@@ -9,7 +9,7 @@ Local hotseat rally stages on dirt and asphalt. The active pass builds readable 
 - Groups of linked corners, including changes in direction and grade, interspersed with deliberate short and long straights. Straights are not required between individual corners.
 - Sustained dirt/asphalt sections, rather than random surface changes per road slice.
 - One native stage Resource drives draped mesh geometry, collision, progress and visible pacenotes.
-- Widened 12 m roads over a generated green terrain with blended shoulders, with no guardrails. Grass slows the car and permits driving back onto the road without resetting the run.
+- Saved real routes use 6 m roads; procedural tests retain 12 m roads. Roads sit over authored green terrain with blended shoulders, with no guardrails. Grass slows the car and permits driving back onto the road without resetting the run.
 - Native Godot/Jolt chassis collisions and road/ground wheel queries with vendored GEVP in GDScript; no C++ gameplay dependency.
 - All-wheel drive, automatic transmission, suspension, tire slip forces, jumps, landings and rollover. Steering redirects momentum through tire forces; handbrake rotation comes from rear-wheel braking and lost lateral reserve.
 - One active driver at a time on an identical stage, timed from the first throttle/brake input to the finish. Scene-tree pause stops native physics and timing. Retries clear the run; driver handoff retains each driver's best in that stage session.
@@ -25,7 +25,7 @@ Local hotseat rally stages on dirt and asphalt. The active pass builds readable 
 
 ## Architecture and limits
 
-Godot 4.7.2, built-in Jolt, GDScript and native Resources/meshes/bodies. GEVP owns suspension, tire forces and drivetrain; Jolt integrates the rigid body. An original voxel hatchback has four independent wheel pivots, working rear lamps and stable hotseat paint colors. Inherited car scenes support future models and AWD/FWD/RWD tuning through the same controller; see `VoxelCars.md`. No banking, ice, boost, second physics backend, manual track editor, damage, online multiplayer or simultaneous racing is included.
+Godot 4.7.2, built-in Jolt, GDScript and native Resources/meshes/bodies. GEVP owns suspension, tire forces and drivetrain; Jolt integrates the rigid body. An original voxel hatchback has four independent wheel pivots, working rear lamps and stable hotseat paint colors. Inherited car scenes support future models and AWD/FWD/RWD tuning through the same controller; see `VoxelCars.md`. No banking, ice, boost, second physics backend, interactive track editor, damage, online multiplayer or simultaneous racing is included. GPX authoring and native world baking are offline tools.
 
 `RallyStages.md` documents generation and its reproducibility boundary. `NativeGodotMigration.md` documents ownership, vehicle integration, session lifecycle and dependency maintenance. Older handling/collision audits are historical snapshots and must not be treated as the current surface catalog or generation contract.
 

@@ -9,7 +9,7 @@ wheels = Array[NodePath]([NodePath("Model/CarModel/WheelFL"), NodePath("Model/Ca
 tail_lamps = Array[NodePath]([NodePath("Model/CarModel/TailLeft"), NodePath("Model/CarModel/TailRight")])
 brake_lamps = Array[NodePath]([NodePath("Model/CarModel/BrakeLeft"), NodePath("Model/CarModel/BrakeRight")])
 reverse_lamps = Array[NodePath]([NodePath("Model/CarModel/ReverseLeft"), NodePath("Model/CarModel/ReverseRight")])
-wheel_radii = PackedFloat32Array(0.325, 0.325, 0.325, 0.325)
+wheel_radii = PackedFloat32Array(0.35, 0.35, 0.35, 0.35)
 wheel_widths = PackedFloat32Array(0.2, 0.2, 0.2, 0.2)
 
 [node name="Model" parent="." instance=ExtResource("2")]

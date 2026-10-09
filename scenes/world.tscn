@@ -7,10 +7,10 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/rally_hud.tscn" id="5"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
-sky_top_color = Color(0.16, 0.28, 0.46, 1)
-sky_horizon_color = Color(0.62, 0.58, 0.48, 1)
-ground_bottom_color = Color(0.08, 0.08, 0.07, 1)
-ground_horizon_color = Color(0.32, 0.3, 0.26, 1)
+sky_top_color = Color(0.07058823529, 0.3058823529, 0.537254902, 1)
+sky_horizon_color = Color(0.9176470588, 0.831372549, 0.6666666667, 1)
+ground_bottom_color = Color(0.09803921569, 0.2352941176, 0.2431372549, 1)
+ground_horizon_color = Color(0.1490196078, 0.3607843137, 0.2588235294, 1)
 sun_angle_max = 40.0
 
 [sub_resource type="Sky" id="Sky"]
@@ -36,14 +36,14 @@ environment = SubResource("Env")
 [node name="Sun" type="DirectionalLight3D" parent="."]
 rotation_order = 0
 rotation = Vector3(-0.9, -0.8, 0)
-light_color = Color(1, 0.96, 0.9, 1)
+light_color = Color(1, 1, 1, 1)
 light_energy = 1.2
 shadow_enabled = true
 directional_shadow_max_distance = 180.0
 
 [node name="ChaseCamera" type="Camera3D" parent="."]
 current = true
-fov = 66.0
+fov = 68.0
 script = ExtResource("2")
 
 [node name="PauseMenu" parent="." instance=ExtResource("3")]
@@ -63,5 +63,20 @@ theme_override_font_sizes/font_size = 16
 text = "Debug"
 
 [node name="HUD" type="CanvasLayer" parent="."]
+visible = false
 
 [node name="RallyHUD" parent="HUD" instance=ExtResource("5")]
+
+[node name="Loading" type="Label" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -20.0
+offset_right = 150.0
+offset_bottom = 20.0
+theme = ExtResource("4")
+text = "Preparing stage…"
+horizontal_alignment = 1

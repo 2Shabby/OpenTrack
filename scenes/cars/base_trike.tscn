@@ -1,0 +1,24 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/cars/base_vehicle.tscn" id="1"]
+[ext_resource type="Script" path="res://addons/gevp/scripts/wheel.gd" id="2"]
+
+[node name="Trike" node_paths=PackedStringArray("front_center_wheel", "rear_left_wheel", "rear_right_wheel") instance=ExtResource("1")]
+front_center_wheel = NodePath("WheelFront")
+rear_left_wheel = NodePath("WheelRearLeft")
+rear_right_wheel = NodePath("WheelRearRight")
+
+[node name="WheelFront" type="RayCast3D" parent="."]
+collision_mask = 3
+exclude_parent = true
+script = ExtResource("2")
+
+[node name="WheelRearLeft" type="RayCast3D" parent="."]
+collision_mask = 3
+exclude_parent = true
+script = ExtResource("2")
+
+[node name="WheelRearRight" type="RayCast3D" parent="."]
+collision_mask = 3
+exclude_parent = true
+script = ExtResource("2")

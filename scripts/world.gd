@@ -18,22 +18,26 @@ var _best_times: Dictionary = {}
 var _spawn_pose := Transform3D.IDENTITY
 var _previous_position := Vector3.ZERO
 var recovery_count := 0
+var generating := true
 
 @onready var camera: Camera3D = $ChaseCamera
 @onready var pause_menu: CanvasLayer = $PauseMenu
 @onready var debug_label: Label = $Debug/Label
 @onready var hud: Control = $HUD/RallyHUD
+@onready var loading_label: Label = $Loading
 
-func start_race(seed_value: int, length_m: int) -> bool:
-	var generator := Game.StageGenerator.new()
-	stage = generator.generate(seed_value, length_m, Game.terrain_settings)
+func start_race() -> bool:
+	stage = Game.create_stage()
 	if stage == null:
-		Game.setup_error = generator.error
+		generating = false
 		return false
 	var geometry := TrackGeometry.new()
 	geometry.name = "Track"
 	add_child(geometry)
-	geometry.build(stage)
+	if not await geometry.build(stage):
+		Game.setup_error = stage.terrain.error
+		generating = false
+		return false
 	_spawn_pose = stage.spawn_pose()
 	if not _spawn_car():
 		return false
@@ -48,6 +52,9 @@ func start_race(seed_value: int, length_m: int) -> bool:
 	pause_menu.open_menu.connect(func() -> void: open_menu.emit())
 	pause_menu.quit_game.connect(func() -> void: get_tree().quit())
 	_update_hud()
+	generating = false
+	loading_label.hide()
+	$HUD.show()
 	return true
 
 func set_paused(value: bool) -> void:
@@ -83,6 +90,8 @@ func _physics_process(delta: float) -> void:
 	_update_hud()
 
 func _process(delta: float) -> void:
+	if generating:
+		return
 	if Input.is_action_just_pressed("toggle_debug"):
 		debug_label.visible = not debug_label.visible
 	if Input.is_action_just_pressed("next_driver") and not Game.paused and car_root:
@@ -135,7 +144,7 @@ func _spawn_car() -> bool:
 		Game.setup_error = "Selected car scene must use the RallyCar controller."
 		instance.free()
 		return false
-	car.configure(Game.player_color(Game.player_index))
+	car.configure(Game.player_paint_index(Game.player_index))
 	if not car.place_at(_spawn_pose):
 		Game.setup_error = car.configuration_error
 		car.free()
@@ -170,6 +179,7 @@ func _reset_run() -> void:
 	_previous_position = car_root.global_position
 
 func _update_hud() -> void:
+	hud.set_stage_name(stage.display_name, stage.region)
 	hud.update_run(Game.player_name(), Game.players.size(), _telemetry["speed"], _progress, stage.length_m, stage.pacenote(_progress), _elapsed, _finished, _best_times.get(Game.player_index, 0.0), _telemetry["surface"])
 
 func _debug_text(data: Dictionary) -> String:

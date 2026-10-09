@@ -2,10 +2,12 @@ extends RefCounted
 
 const WIDTH := 2.0
 const Field := preload("res://scripts/terrain_field.gd")
+var _borders: Array[PackedVector3Array] = []
 
 # Four strips form a closed border. Their inner vertices lie on the road;
-# their outer edges follow the exact terrain triangles, including diagonals.
+# their outer edges sample the 10 cm source and become shared clipping borders.
 func build(stage: Resource) -> Array[ArrayMesh]:
+	_borders.clear()
 	var meshes: Array[ArrayMesh] = []
 	var outer_paths: Array[PackedVector3Array] = []
 	for side in 2:
@@ -13,7 +15,7 @@ func build(stage: Resource) -> Array[ArrayMesh]:
 		var outer := PackedVector3Array()
 		var normals := PackedVector3Array()
 		for i in inner.size():
-			var point: Vector3 = inner[i] + (inner[i] - stage.centers[i]).normalized() * WIDTH
+			var point: Vector3 = inner[i] + (inner[i] - stage.centers[i]).normalized() * _width_at(stage, i)
 			if i == 0:
 				point -= _forward(stage, 0) * WIDTH
 			elif i == inner.size() - 1:
@@ -27,6 +29,7 @@ func build(stage: Resource) -> Array[ArrayMesh]:
 		var outer := PackedVector3Array([outer_paths[0][i], outer_paths[1][i]])
 		var normals := PackedVector3Array([stage.road_normals[i * 2], stage.road_normals[i * 2 + 1]])
 		meshes.append(_strip(stage.terrain, inner, outer, normals))
+	stage.terrain.set_road_border(outer_paths, _borders)
 	return meshes
 
 func _forward(stage: Resource, i: int) -> Vector3:
@@ -36,6 +39,7 @@ func _strip(field: Resource, inner: PackedVector3Array, outer: PackedVector3Arra
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var indices := PackedInt32Array()
+	var border := PackedVector3Array()
 	for i in range(inner.size() - 1):
 		var breaks := _terrain_breaks(field, outer[i], outer[i + 1])
 		for j in breaks.size():
@@ -43,12 +47,13 @@ func _strip(field: Resource, inner: PackedVector3Array, outer: PackedVector3Arra
 				continue
 			var t := breaks[j]
 			var point := outer[i] if t == 0.0 else outer[i + 1] if t == 1.0 else outer[i].lerp(outer[i + 1], t)
-			point.y = field.height_at(Vector2(point.x, point.z))
+			point.y = field.sample_height(Vector2(point.x, point.z))
+			border.append(point)
 			# Preserve shared cross-sections exactly: lerp at 1 can round differently.
 			vertices.append(inner[i] if t == 0.0 else inner[i + 1] if t == 1.0 else inner[i].lerp(inner[i + 1], t))
 			vertices.append(point)
 			normals.append(inner_normals[i].lerp(inner_normals[i + 1], t).normalized())
-			normals.append(field.normal_at(Vector2(point.x, point.z)))
+			normals.append(field.sample_normal(Vector2(point.x, point.z)))
 			if vertices.size() > 2:
 				var a := vertices.size() - 4
 				for triangle: Vector3i in [Vector3i(a, a + 1, a + 2), Vector3i(a + 1, a + 3, a + 2)]:
@@ -67,11 +72,12 @@ func _strip(field: Resource, inner: PackedVector3Array, outer: PackedVector3Arra
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_borders.append(border)
 	return mesh
 
 func _terrain_breaks(field: Resource, a: Vector3, b: Vector3) -> PackedFloat64Array:
-	var first: Vector2 = (Vector2(a.x, a.z) - field.origin) / Field.SPACING
-	var last: Vector2 = (Vector2(b.x, b.z) - field.origin) / Field.SPACING
+	var first: Vector2 = (Vector2(a.x, a.z)) / Field.SPACING
+	var last: Vector2 = (Vector2(b.x, b.z)) / Field.SPACING
 	var values: Array[float] = [0.0, 1.0]
 	# Terrain cell edges and its x+z diagonal partition this line into planes.
 	for axis: Vector2 in [Vector2.RIGHT, Vector2.DOWN, Vector2.ONE]:
@@ -88,3 +94,16 @@ func _terrain_breaks(field: Resource, a: Vector3, b: Vector3) -> PackedFloat64Ar
 			result.append(value)
 	result[-1] = 1.0
 	return result
+
+# Narrow the verge at tight real-world bends so the outer strip cannot fold
+# through its own centre of curvature. Procedural roads retain their 2 m verge.
+func _width_at(stage: Resource, station: int) -> float:
+	if stage.stage_id.is_empty():
+		return WIDTH
+	var first := maxi(0, station - 1)
+	var last := mini(stage.centers.size() - 1, station + 1)
+	var distance: float = stage.distances[last] - stage.distances[first]
+	var turn := absf(angle_difference(stage.headings[first], stage.headings[last]))
+	if turn < 0.0001:
+		return WIDTH
+	return clampf((distance / turn - stage.road_width * 0.5) * 0.7, 0.2, WIDTH)

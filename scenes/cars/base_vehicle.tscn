@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/car.gd" id="1"]
+
+[node name="Vehicle" type="RigidBody3D"]
+collision_layer = 4
+collision_mask = 3
+continuous_cd = true
+linear_damp_mode = 1
+linear_damp = 0.0
+angular_damp_mode = 1
+angular_damp = 0.0
+process_physics_priority = -1
+script = ExtResource("1")

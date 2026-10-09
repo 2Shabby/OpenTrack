@@ -2,7 +2,19 @@ class_name RallyStage
 extends Resource
 
 # The recipe, rendered road, collision road and pacenotes share these stations.
-@export var generator_version := "rally-terrain-v3"
+@export var stage_id := ""
+@export var display_name := "Procedural test stage"
+@export var region := ""
+@export var source_url := ""
+@export var source_gpx := ""
+@export var source_sha256 := ""
+@export var source_length_m := 0.0
+@export var road_width := 12.0
+@export var baked_scene_path := ""
+@export var baked_bounds := AABB()
+@export var baked_stats: Dictionary = {}
+@export var baked_fingerprint := ""
+@export var generator_version := "rally-voxel-v4"
 @export var engine_version: String = Engine.get_version_info()["string"]
 @export var seed_value := 0
 @export var length_m := 0.0
@@ -20,7 +32,7 @@ extends Resource
 const ROAD_WIDTH := 12.0
 
 func info() -> Dictionary:
-	return {"seed": seed_value, "generator": generator_version, "engine": engine_version, "length_m": length_m, "feature_count": features.size(), "track_width": ROAD_WIDTH}
+	return {"seed": seed_value, "generator": generator_version, "engine": engine_version, "length_m": length_m, "feature_count": features.size(), "track_width": road_width, "id": stage_id, "name": display_name, "region": region, "source_url": source_url}
 
 func spawn_pose() -> Transform3D:
 	return road_pose(5.0)
@@ -33,7 +45,7 @@ func rebuild_road() -> void:
 	distances.resize(centers.size())
 	distances[0] = 0.0
 	for i in centers.size():
-		var right := Vector3(cos(headings[i]), 0, -sin(headings[i])) * ROAD_WIDTH * 0.5
+		var right := Vector3(cos(headings[i]), 0, -sin(headings[i])) * road_width * 0.5
 		left_edges[i] = centers[i] - right
 		right_edges[i] = centers[i] + right
 		if i > 0:
@@ -73,7 +85,7 @@ func crossed_finish(previous: Vector3, current: Vector3) -> bool:
 		return false
 	var t := start.z / (start.z - finish.z)
 	var crossing := start.lerp(finish, t)
-	return absf(crossing.x) <= ROAD_WIDTH * 0.5 and crossing.y >= -1.5 and crossing.y <= 20.0
+	return absf(crossing.x) <= road_width * 0.5 and crossing.y >= -1.5 and crossing.y <= 20.0
 
 func pieces() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []

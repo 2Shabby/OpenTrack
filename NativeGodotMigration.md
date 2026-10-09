@@ -29,6 +29,6 @@ Pause uses SceneTree.paused, with an always-processing pause menu/input handler.
 
 ## Dependency maintenance
 
-GEVP is vendored at `c392257f54f6ca537dc10bc5badad0c060f18982`. `addons/gevp/UPSTREAM.txt` records two wheel integration fixes: initial position/spring history and body-relative force offsets. The MIT license and upstream README are retained. Demo controllers, scenes and effects are excluded.
+GEVP is vendored at `c392257f54f6ca537dc10bc5badad0c060f18982`. `addons/gevp/UPSTREAM.txt` records local wheel fixes for initial position/spring history, body-relative force offsets and rolling drag separated from drivetrain reaction torque. The MIT license and upstream README are retained. Demo controllers, scenes and effects are excluded.
 
 See [VehicleHandling.md](VehicleHandling.md) for tuning and verification, [VoxelCars.md](VoxelCars.md) for the asset contract, and [RallyStages.md](RallyStages.md) for generation. Historical Rust handling/collision audits do not describe the live implementation.

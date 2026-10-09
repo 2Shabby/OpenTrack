@@ -2,7 +2,7 @@ class_name CarVisual
 extends Node3D
 
 # Generated visual scenes bind these roles explicitly, independent of asset names.
-@export var wheels: Array[MeshInstance3D] = [] # FL, FR, RL, RR
+@export var wheels: Array[MeshInstance3D] = [] # FL, FR, RL, RR or Front, RL, RR
 @export var wheel_radii := PackedFloat32Array()
 @export var wheel_widths := PackedFloat32Array()
 @export var tail_lamps: Array[MeshInstance3D] = []
@@ -16,13 +16,15 @@ var _reverse: Array[StandardMaterial3D] = []
 var _materials_prepared := false
 
 func validation_error() -> String:
-	if wheels.size() != 4 or wheel_radii.size() != 4 or wheel_widths.size() != 4:
-		return "CarVisual requires four wheel bindings and dimensions in FL, FR, RL, RR order."
+	var count := wheels.size()
+	if count not in [3, 4] or wheel_radii.size() != count or wheel_widths.size() != count:
+		return "CarVisual requires FL/FR/RL/RR or Front/RL/RR wheel bindings and dimensions."
+	var front_count := count - 2
 	var unique := {}
-	for i in 4:
+	for i in count:
 		var wheel := wheels[i]
 		if not is_instance_valid(wheel) or wheel.mesh == null or not is_ancestor_of(wheel) or unique.has(wheel):
-			return "CarVisual wheel bindings must reference four distinct descendant meshes."
+			return "CarVisual wheel bindings must reference distinct descendant meshes."
 		unique[wheel] = true
 		if not is_finite(wheel_radii[i]) or not is_finite(wheel_widths[i]) or wheel_radii[i] <= 0 or wheel_widths[i] <= 0:
 			return "CarVisual wheel dimensions must be positive metres."
@@ -31,13 +33,18 @@ func validation_error() -> String:
 			return "Wheel meshes must have positive unit scale, zero rotation and hub-centred geometry."
 		if wheel.mesh.get_aabb().get_center().length() > 0.001:
 			return "Wheel mesh origins must be at their hub centres."
-		if (pose.origin.x < 0) != (i % 2 == 0):
-			return "Wheel bindings must be ordered FL, FR, RL, RR in -Z-forward coordinates."
-	for i in 2:
-		if not is_equal_approx(wheel_radii[i * 2], wheel_radii[i * 2 + 1]) or not is_equal_approx(wheel_widths[i * 2], wheel_widths[i * 2 + 1]):
+		if count == 3 and i == 0:
+			if not is_zero_approx(pose.origin.x):
+				return "A three-wheeler requires a centered front wheel."
+		elif is_zero_approx(pose.origin.x) or (pose.origin.x < 0) != ((i if count == 4 else i - 1) % 2 == 0):
+			return "Wheel bindings must be ordered FL/FR/RL/RR or Front/RL/RR in -Z-forward coordinates."
+	for i in ([0, 2] if count == 4 else [1]):
+		if not is_equal_approx(wheel_radii[i], wheel_radii[i + 1]) or not is_equal_approx(wheel_widths[i], wheel_widths[i + 1]):
 			return "GEVP requires matching tire dimensions on each axle."
-	if _local_pose(wheels[0]).origin.z >= _local_pose(wheels[2]).origin.z:
+	if _local_pose(wheels[0]).origin.z >= _local_pose(wheels[front_count]).origin.z:
 		return "Front wheel mounts must precede rear mounts along -Z."
+	if not is_equal_approx(_local_pose(wheels[count - 2]).origin.z, _local_pose(wheels[count - 1]).origin.z) or (count == 4 and not is_equal_approx(_local_pose(wheels[0]).origin.z, _local_pose(wheels[1]).origin.z)):
+		return "Left and right wheels on each axle must share the same longitudinal mount."
 	for lamps in [tail_lamps, brake_lamps, reverse_lamps]:
 		if lamps.is_empty():
 			return "CarVisual requires tail, brake and reverse lamp bindings."
@@ -59,20 +66,21 @@ func validation_error() -> String:
 		return "CarVisual requires a material with the semantic role Paint."
 	return ""
 
-func configure(color: Color) -> void:
+func configure(palette_index: int) -> void:
+	var color := Palette.color(palette_index)
 	if not _materials_prepared:
 		_collect_paint(self)
-		_tail = _lamp_materials(tail_lamps, Color(1.0, 0.015, 0.025))
-		_brake = _lamp_materials(brake_lamps, Color(1.0, 0.015, 0.025))
-		_reverse = _lamp_materials(reverse_lamps, Color(1.0, 0.96, 0.85))
+		_tail = _lamp_materials(tail_lamps, Palette.color(7))
+		_brake = _lamp_materials(brake_lamps, Palette.color(8))
+		_reverse = _lamp_materials(reverse_lamps, Palette.color(19))
 		_materials_prepared = true
 		set_lights(0.0, false)
 	for material in _paint:
-		material.albedo_color = Color(color, 1.0)
+		material.albedo_color = color
 
 func wheel_bindings() -> Array[Dictionary]:
 	var bindings: Array[Dictionary] = []
-	for i in 4:
+	for i in wheels.size():
 		bindings.append({"pivot": wheels[i], "center": _local_pose(wheels[i]).origin, "radius": wheel_radii[i], "width": wheel_widths[i]})
 	return bindings
 

@@ -9,10 +9,8 @@ const EPSILON := 0.00001
 
 var error := ""
 var _noise := FastNoiseLite.new()
-var _segments: Dictionary = {}
 var _neighbors := PackedVector3Array()
 var _config: Resource
-var _road_caps := PackedFloat32Array()
 
 func apply(stage: Resource, config: Resource) -> bool:
 	if not config.valid():
@@ -36,12 +34,8 @@ func apply(stage: Resource, config: Resource) -> bool:
 	for i in stage.centers.size():
 		stage.centers[i].y = heights[i]
 	stage.rebuild_road()
-	_index_segments(stage)
-	stage.terrain = _heightfield(stage)
-	# The same heightfield is also checked after conservative cut-and-fill.
-	if not _terrain_is_gentle(stage.terrain):
-		error = "Terrain is too steep around this stage. Reduce relief or increase wavelength/shoulder blending."
-		return false
+	stage.terrain = Field.new()
+	stage.terrain.initialize(stage, config)
 	return true
 
 func _raw(point: Vector2) -> float:
@@ -63,7 +57,7 @@ func _smooth(heights: PackedFloat64Array, distances: PackedFloat64Array) -> Pack
 func _find_neighbors(stage: Resource) -> void:
 	_neighbors.clear()
 	var buckets := {}
-	var radius: float = stage.ROAD_WIDTH + 2 * _config.blend_distance
+	var radius: float = stage.road_width + 2 * _config.blend_distance
 	var reach := ceili(radius / CELL_SIZE)
 	for i in stage.centers.size():
 		var point: Vector3 = stage.centers[i]
@@ -77,7 +71,7 @@ func _find_neighbors(stage: Resource) -> void:
 					var distance := point.distance_to(stage.centers[j])
 					if distance > radius:
 						continue
-					var limit: float = maxf(0, distance - stage.ROAD_WIDTH) * MAX_SHOULDER_GRADIENT
+					var limit: float = maxf(0, distance - stage.road_width) * MAX_SHOULDER_GRADIENT
 					if limit < minf(2 * _config.amplitude, path_distance * _config.max_gradient):
 						_neighbors.append(Vector3(j, i, limit))
 		if not buckets.has(cell):
@@ -88,10 +82,10 @@ func _constrain(stage: Resource, heights: PackedFloat64Array) -> void:
 	var lengths := PackedFloat64Array()
 	var limits := PackedFloat64Array()
 	for i in range(1, stage.centers.size()):
-		var left: Vector3 = stage.centers[i] - _right(stage.headings[i]) * stage.ROAD_WIDTH * 0.5
-		var previous_left: Vector3 = stage.centers[i - 1] - _right(stage.headings[i - 1]) * stage.ROAD_WIDTH * 0.5
-		var right: Vector3 = stage.centers[i] + _right(stage.headings[i]) * stage.ROAD_WIDTH * 0.5
-		var previous_right: Vector3 = stage.centers[i - 1] + _right(stage.headings[i - 1]) * stage.ROAD_WIDTH * 0.5
+		var left: Vector3 = stage.centers[i] - _right(stage.headings[i]) * stage.road_width * 0.5
+		var previous_left: Vector3 = stage.centers[i - 1] - _right(stage.headings[i - 1]) * stage.road_width * 0.5
+		var right: Vector3 = stage.centers[i] + _right(stage.headings[i]) * stage.road_width * 0.5
+		var previous_right: Vector3 = stage.centers[i - 1] + _right(stage.headings[i - 1]) * stage.road_width * 0.5
 		lengths.append(stage.distances[i] - stage.distances[i - 1])
 		limits.append(minf(lengths[-1], minf(left.distance_to(previous_left), right.distance_to(previous_right))) * _config.max_gradient)
 	for _pass in 128:
@@ -141,148 +135,6 @@ func _constrain(stage: Resource, heights: PackedFloat64Array) -> void:
 		mean += height / heights.size()
 	for i in heights.size():
 		heights[i] = mean + (heights[i] - mean) * scale
-
-func _index_segments(stage: Resource) -> void:
-	_segments.clear()
-	var radius: float = stage.ROAD_WIDTH * 0.5 + _config.blend_distance + Field.SPACING * sqrt(2.0)
-	for i in range(stage.centers.size() - 1):
-		var a: Vector3 = stage.centers[i]
-		var b: Vector3 = stage.centers[i + 1]
-		var first := _cell(Vector2(minf(a.x, b.x) - radius, minf(a.z, b.z) - radius))
-		var last := _cell(Vector2(maxf(a.x, b.x) + radius, maxf(a.z, b.z) + radius))
-		for x in range(first.x, last.x + 1):
-			for z in range(first.y, last.y + 1):
-				var cell := Vector2i(x, z)
-				if not _segments.has(cell):
-					_segments[cell] = []
-				_segments[cell].append(i)
-
-func _heightfield(stage: Resource) -> Resource:
-	var field := Field.new()
-	var first := Vector2(INF, INF)
-	var last := Vector2(-INF, -INF)
-	for point: Vector3 in stage.centers:
-		first = first.min(Vector2(point.x, point.z))
-		last = last.max(Vector2(point.x, point.z))
-	var chunk_size := Field.SPACING * Field.CHUNK_CELLS
-	field.origin = Vector2(floor((first.x - Field.MARGIN) / chunk_size), floor((first.y - Field.MARGIN) / chunk_size)) * chunk_size
-	last = Vector2(ceil((last.x + Field.MARGIN) / chunk_size), ceil((last.y + Field.MARGIN) / chunk_size)) * chunk_size
-	field.size = Vector2i((last - field.origin) / Field.SPACING) + Vector2i.ONE
-	field.heights.resize(field.size.x * field.size.y)
-	for z in field.size.y:
-		for x in field.size.x:
-			var point: Vector2 = field.origin + Vector2(x, z) * Field.SPACING
-			var base := _raw(point)
-			var nearest := INF
-			var target := 0.0
-			for i: int in _segments.get(_cell(point), []):
-				var a: Vector3 = stage.centers[i]
-				var b: Vector3 = stage.centers[i + 1]
-				var edge := Vector2(b.x - a.x, b.z - a.z)
-				var t := clampf((point - Vector2(a.x, a.z)).dot(edge) / edge.length_squared(), 0, 1)
-				var distance := point.distance_squared_to(Vector2(a.x, a.z) + edge * t)
-				if distance < nearest:
-					nearest = distance
-					target = lerpf(a.y, b.y, t)
-			var distance := sqrt(nearest)
-			var shoulder: float = maxf(0, distance - stage.ROAD_WIDTH * 0.5 - Field.SPACING * sqrt(2.0))
-			var t := clampf(shoulder / _config.blend_distance, 0, 1)
-			var weight := 1.0 - t * t * t * (t * (6 * t - 15) + 10)
-			field.heights[z * field.size.x + x] = lerpf(base, target - Field.ROAD_CLEARANCE, weight)
-	_cap_road_cells(stage, field)
-	_limit_terrain_slopes(field)
-	return field
-
-func _limit_terrain_slopes(field: Resource) -> void:
-	# Anchor the road corridor first. Its upper envelope resolves nearby road
-	# constraints; the matching lower envelope makes the surrounding terrain fill
-	# up to that corridor rather than pulling it down into distant valleys.
-	var ceiling := _road_caps.duplicate()
-	_slope_envelope(field, ceiling, false)
-	var floor_heights := PackedFloat32Array()
-	floor_heights.resize(field.heights.size())
-	floor_heights.fill(-INF)
-	for i in _road_caps.size():
-		if is_finite(_road_caps[i]):
-			floor_heights[i] = ceiling[i]
-	_slope_envelope(field, floor_heights, true)
-	for i in field.heights.size():
-		field.heights[i] = clampf(field.heights[i], floor_heights[i], ceiling[i])
-	# The lower envelope is already slope-limited, so this final cut cannot go
-	# below it. Road anchors remain fixed while cuts and fills extend as needed.
-	_slope_envelope(field, field.heights, false)
-
-func _slope_envelope(field: Resource, heights: PackedFloat32Array, raising: bool) -> void:
-	var step := MAX_TERRAIN_GRADIENT * Field.SPACING / sqrt(2.0)
-	for direction: Vector2i in [Vector2i(1, 1), Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1)]:
-		var z_start: int = 0 if direction.y > 0 else field.size.y - 1
-		var z_end: int = field.size.y if direction.y > 0 else -1
-		var x_start: int = 0 if direction.x > 0 else field.size.x - 1
-		var x_end: int = field.size.x if direction.x > 0 else -1
-		for z in range(z_start, z_end, direction.y):
-			for x in range(x_start, x_end, direction.x):
-				var i: int = z * field.size.x + x
-				if x != x_start:
-					var neighbor := heights[i - direction.x]
-					heights[i] = maxf(heights[i], neighbor - step) if raising else minf(heights[i], neighbor + step)
-				if z != z_start:
-					var neighbor := heights[i - direction.y * field.size.x]
-					heights[i] = maxf(heights[i], neighbor - step) if raising else minf(heights[i], neighbor + step)
-
-func _cap_road_cells(stage: Resource, field: Resource) -> void:
-	_road_caps.resize(field.heights.size())
-	_road_caps.fill(INF)
-	# Only intersecting cells receive constraints. All four cell vertices are
-	# capped to keep their interpolated triangles below the actual road plane.
-	for i in range(stage.centers.size() - 1):
-		_cap_triangle(field, stage.left_edges[i], stage.right_edges[i], stage.left_edges[i + 1])
-		_cap_triangle(field, stage.right_edges[i], stage.right_edges[i + 1], stage.left_edges[i + 1])
-
-func _cap_triangle(field: Resource, a: Vector3, b: Vector3, c: Vector3) -> void:
-	var up := (c - a).cross(b - a).normalized()
-	var first := Vector2(minf(a.x, minf(b.x, c.x)), minf(a.z, minf(b.z, c.z)))
-	var last := Vector2(maxf(a.x, maxf(b.x, c.x)), maxf(a.z, maxf(b.z, c.z)))
-	var begin := Vector2i((first - field.origin) / Field.SPACING)
-	var end := Vector2i((last - field.origin) / Field.SPACING)
-	var triangle: Array[Vector2] = [Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z)]
-	var axes: Array[Vector4] = []
-	for i in 3:
-		var edge := triangle[(i + 1) % 3] - triangle[i]
-		var axis := Vector2(-edge.y, edge.x)
-		var pa := axis.dot(triangle[0])
-		var pb := axis.dot(triangle[1])
-		var pc := axis.dot(triangle[2])
-		axes.append(Vector4(axis.x, axis.y, minf(pa, minf(pb, pc)), maxf(pa, maxf(pb, pc))))
-	for z in range(maxi(0, begin.y), mini(field.size.y - 2, end.y) + 1):
-		for x in range(maxi(0, begin.x), mini(field.size.x - 2, end.x) + 1):
-			var midpoint: Vector2 = field.origin + (Vector2(x, z) + Vector2.ONE * 0.5) * Field.SPACING
-			if not _cell_intersects_triangle(midpoint, axes):
-				continue
-			for corner: Vector2i in [Vector2i(x, z), Vector2i(x + 1, z), Vector2i(x, z + 1), Vector2i(x + 1, z + 1)]:
-				var point: Vector2 = field.origin + Vector2(corner) * Field.SPACING
-				var height := a.y - (up.x * (point.x - a.x) + up.z * (point.y - a.z)) / up.y - Field.ROAD_CLEARANCE
-				var index: int = corner.y * field.size.x + corner.x
-				_road_caps[index] = minf(_road_caps[index], height)
-				field.heights[index] = minf(field.heights[index], height)
-
-func _cell_intersects_triangle(midpoint: Vector2, axes: Array[Vector4]) -> bool:
-	for axis in axes:
-		var projection := axis.x * midpoint.x + axis.y * midpoint.y
-		var radius := (absf(axis.x) + absf(axis.y)) * Field.SPACING * 0.5
-		if projection + radius < axis.z - EPSILON or projection - radius > axis.w + EPSILON:
-			return false
-	return true
-
-func _terrain_is_gentle(field: Resource) -> bool:
-	for z in range(field.size.y - 1):
-		for x in range(field.size.x - 1):
-			var a: float = field.heights[z * field.size.x + x]
-			var b: float = field.heights[z * field.size.x + x + 1]
-			var c: float = field.heights[(z + 1) * field.size.x + x]
-			var d: float = field.heights[(z + 1) * field.size.x + x + 1]
-			if maxf(Vector2(b - a, c - a).length(), Vector2(d - c, d - b).length()) / Field.SPACING > MAX_TERRAIN_GRADIENT + EPSILON:
-				return false
-	return true
 
 static func _right(yaw: float) -> Vector3:
 	return Vector3(cos(yaw), 0, -sin(yaw))
