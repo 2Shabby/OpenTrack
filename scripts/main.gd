@@ -15,12 +15,12 @@ func _show_setup() -> void:
 	setup.start_race.connect(_start_race)
 	setup.back.connect(_show_menu)
 
-func _start_race() -> void:
+func _start_race(authored_stage: RallyStage = null) -> void:
 	Game.configure_players(Game.player_count)
 	var world := _replace_content(preload("res://scenes/world.tscn"), Game.State.DRIVING)
 	world.open_setup.connect(_show_setup)
 	world.open_menu.connect(_show_menu)
-	if not await world.start_race():
+	if not await world.start_race(authored_stage):
 		_show_setup()
 
 func _replace_content(scene: PackedScene, state: int) -> Node:

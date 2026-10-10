@@ -1,0 +1,58 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/city_preview.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/chase_camera.gd" id="2"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+sky_top_color = Color(0.16, 0.35, 0.56, 1)
+sky_horizon_color = Color(0.78, 0.82, 0.85, 1)
+ground_bottom_color = Color(0.12, 0.2, 0.14, 1)
+ground_horizon_color = Color(0.27, 0.34, 0.25, 1)
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+ambient_light_energy = 0.8
+tonemap_mode = 3
+
+[node name="CityPreview" type="Node3D"]
+script = ExtResource("1")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.9, -0.7, 0)
+light_energy = 1.1
+shadow_enabled = true
+directional_shadow_max_distance = 140.0
+
+[node name="ChaseCamera" type="Camera3D" parent="."]
+current = true
+far = 4000.0
+script = ExtResource("2")
+
+[node name="MapCamera" type="Camera3D" parent="."]
+position = Vector3(0, 1800, 0)
+rotation = Vector3(-1.5707963, 0, 0)
+projection = 1
+size = 2400.0
+far = 4000.0
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Label" type="Label" parent="HUD"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 1100.0
+offset_bottom = 90.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 18
+text = "Loading baked city…"

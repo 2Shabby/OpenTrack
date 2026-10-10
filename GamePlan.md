@@ -1,6 +1,6 @@
 # Open Track rally direction
 
-Local hotseat rally stages on dirt and asphalt. The active pass authors 50 complete real rally routes into saved Godot stage assets and baked worlds, selected directly or through a randomiser. Procedural roads remain an explicit test mode. Unbanked roads follow gently generated terrain, replacing the old modular Trackmania layout. Ice and boost are removed from generation, handling resources, materials and texture generation.
+Local hotseat rally stages on dirt and asphalt. The playable game uses seeded procedural roads and editable terrain controls. A library of 50 complete real rally routes remains in the repository for offline authoring and explicit previews, independently of the game setup and startup. Large baked worlds remain local, ignored artifacts with no Git LFS requirement. Unbanked roads follow gently generated terrain, replacing the old modular Trackmania layout. Ice and boost are removed from generation, handling resources, materials and texture generation.
 
 ## Implemented foundation
 
@@ -9,7 +9,7 @@ Local hotseat rally stages on dirt and asphalt. The active pass authors 50 compl
 - Groups of linked corners, including changes in direction and grade, interspersed with deliberate short and long straights. Straights are not required between individual corners.
 - Sustained dirt/asphalt sections, rather than random surface changes per road slice.
 - One native stage Resource drives draped mesh geometry, collision, progress and visible pacenotes.
-- Saved real routes use 6 m roads; procedural tests retain 12 m roads. Roads sit over authored green terrain with blended shoulders, with no guardrails. Grass slows the car and permits driving back onto the road without resetting the run.
+- Offline real-route previews use 6 m roads; procedural driving uses 12 m roads. Roads sit over authored green terrain with blended shoulders, with no guardrails. Grass slows the car and permits driving back onto the road without resetting the run.
 - Native Godot/Jolt chassis collisions and road/ground wheel queries with vendored GEVP in GDScript; no C++ gameplay dependency.
 - All-wheel drive, automatic transmission, suspension, tire slip forces, jumps, landings and rollover. Steering redirects momentum through tire forces; handbrake rotation comes from rear-wheel braking and lost lateral reserve.
 - One active driver at a time on an identical stage, timed from the first throttle/brake input to the finish. Scene-tree pause stops native physics and timing. Retries clear the run; driver handoff retains each driver's best in that stage session.

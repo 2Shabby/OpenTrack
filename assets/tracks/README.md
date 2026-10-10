@@ -18,7 +18,7 @@ godot --headless --path . --script tools/bake_stages.gd
 python3 -u tools/bake_stage_worlds.py
 ```
 
-The first two commands rebuild road Resources and reset world references. Run them when changing source routes or road authoring. The final command runs the expensive one-off terrain pass, shortest routes first. It isolates each stage in its own Godot process to release memory between worlds, saves compressed meshes/collision to `resources/stages/baked/`, and publishes ready catalog entries atomically. Setup exposes only published worlds. Returning to setup refreshes the available library while a batch is still running.
+The first two commands rebuild road Resources and reset world references. Run them when changing source routes or road authoring. The final command runs the expensive one-off terrain pass, shortest routes first. It isolates each stage in its own Godot process to release memory between worlds, saves compressed meshes/collision to `resources/stages/baked/`, and publishes ready catalog entries atomically. The playable game does not load this catalog or offer saved-map selection. Preview tools access these worlds only when an explicit stage ID is supplied.
 
 Resume an interrupted pass by running the last command again. Completed worlds are skipped when their geometry/source/configuration/engine fingerprint matches. Use `--force` to rebuild all worlds, or `--stage wales-slate-mountain-17119` to bake one. Material resources remain external references, so visual material edits do not require terrain resampling. Keep the computer awake for the batch. The optional offline accelerator uses the same 10 cm source grid and error bounds, with native sampling, partitioning and final triangle checks. On this Mac, the checked sampling chunks match the GDScript reference within a micrometre. The extension is never loaded by the game or required to play saved worlds.
 
@@ -56,4 +56,4 @@ For a rendered preview of a baked stage:
 godot --path . --script tools/terrain_preview.gd -- --stage=wales-slate-mountain-17119
 ```
 
-The same preview defaults to procedural test mode when no saved-stage ID is supplied. Export the project with all resources so the native catalog, stage `.res` files and baked `.scn` scenes are packaged. The JSON authoring manifests and source GPX files are not needed to drive a baked world.
+The same preview generates a procedural test stage when no saved-stage ID is supplied. Normal gameplay does not require the saved catalog, stage `.res` files, baked `.scn` worlds, JSON authoring manifests or GPX sources. Explicit saved-world previews require a local bake of the chosen stage.

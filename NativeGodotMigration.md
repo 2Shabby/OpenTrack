@@ -4,6 +4,7 @@ The live game uses GDScript, Godot 4.7.2 and built-in Jolt at 120 physics ticks/
 
 ## Ownership
 
+- `Game.create_stage()` generates a procedural stage only. Saved catalogs and map assets are loaded by explicit offline tools, which can pass an authored Resource to `world.start_race()`. The normal setup and startup have no saved-map dependency.
 - `rally_generator.gd` builds a seeded native stage Resource with distance-based straight/corner features and shared cross-sections.
 - `terrain_builder.gd` drapes those cross-sections over constrained native noise and stamps a shared terrain heightfield. The route has no splines or banking.
 - `rally_stage.gd` derives mesh sections, distance projection, pitched spawn and swept finish gate, and pacenotes from that Resource.

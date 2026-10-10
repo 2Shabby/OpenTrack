@@ -1,5 +1,6 @@
 /target/
 .godot/
+.DS_Store
 __pycache__/
 /bin/*.dylib
 /extensions/ot_sim/build/
@@ -11,4 +12,6 @@ __pycache__/
 # Regenerated artifacts; source GPX, catalogs and road Resources are retained.
 /assets/tracks/recipes.json
 /.stage_authoring/
+/.venv-city/
 /resources/stages/baked/
+/assets/city/

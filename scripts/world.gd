@@ -26,8 +26,8 @@ var generating := true
 @onready var hud: Control = $HUD/RallyHUD
 @onready var loading_label: Label = $Loading
 
-func start_race() -> bool:
-	stage = Game.create_stage()
+func start_race(authored_stage: RallyStage = null) -> bool:
+	stage = Game.create_stage() if authored_stage == null else authored_stage
 	if stage == null:
 		generating = false
 		return false

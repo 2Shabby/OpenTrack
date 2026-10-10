@@ -18,18 +18,25 @@ func _capture(label: String) -> void:
 
 func _run() -> void:
 	var game := root.get_node("Game")
-	game.stage_mode = game.StageMode.PROCEDURAL_TEST
+	var authored_stage: RallyStage
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--vehicle="):
 			game.car_scene = load(argument.trim_prefix("--vehicle="))
 		if argument.begins_with("--stage="):
-			game.stage_mode = game.StageMode.SAVED
-			game.selected_stage_id = argument.trim_prefix("--stage=")
+			var catalog := StageCatalog.new()
+			authored_stage = catalog.load_stage(argument.trim_prefix("--stage="))
+			if authored_stage == null:
+				push_error(catalog.error)
+				quit(1)
+				return
 	var app: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(app)
 	app.content.get_node("%Start").pressed.emit()
 	await process_frame
-	app.content.get_node("%Start").pressed.emit()
+	if authored_stage == null:
+		app.content.get_node("%Start").pressed.emit()
+	else:
+		app._start_race(authored_stage)
 	var world: Node3D = app.content
 	while is_instance_valid(world) and world.generating and game.setup_error.is_empty():
 		await process_frame

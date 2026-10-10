@@ -1,0 +1,51 @@
+{
+  "bounds_lon_lat": [77.413, 12.857, 77.907, 13.236],
+  "compression": 20.0,
+  "highway_classes": [
+    "motorway", "motorway_link", "trunk", "trunk_link",
+    "primary", "primary_link", "secondary", "secondary_link"
+  ],
+  "require_lane_count": false,
+  "prune_dead_ends": true,
+  "keep_largest_component_after_pruning": true,
+  "expected_road_parts": 8470,
+  "geometry_sha256": "03968b4fcbacbeed33258f2fef8f71c1a521937a90ed6d2249ea3cd54248ab3a",
+  "audit_lane_width_m": 3.0,
+  "audit_unknown_road_width_m": 6.0,
+  "game_track": {
+    "road_lanes_per_direction": 2,
+    "motorway_lanes_per_direction": 3,
+    "bridge_lanes_per_direction": 1,
+    "lane_width_m": 3.0,
+    "median_width_m": 1.0,
+    "collision_chunk_m": 32.0,
+    "bridge_clearance_m": 4.5,
+    "deck_thickness_m": 0.3,
+    "maximum_ramp_grade": 0.12,
+    "mesh_step_m": 2.0
+  },
+  "dual_carriageway_layout": {
+    "lanes_per_direction": 2,
+    "lane_width_m": 3.0,
+    "median_width_m": 1.0,
+    "max_pair_gap_m": 1.5,
+    "max_axis_angle_deg": 15.0,
+    "min_shorter_road_coverage": 0.7,
+    "sample_step_m": 1.0,
+    "projection_tolerance_m": 0.1,
+    "cut_snap_m": 0.05,
+    "max_cluster_span_m": 1.75,
+    "prune_alignment_dead_ends": true
+  },
+  "overlap_repair": {
+    "duplicate_gap_m": 3.0,
+    "junction_radius_m": 13.0,
+    "road_separation_m": 13.5,
+    "parallel_angle_deg": 15.0,
+    "sample_step_m": 4.0,
+    "separation_iterations": 48,
+    "max_local_shift_m": 8.0,
+    "max_step_m": 0.5,
+    "median_opening_margin_m": 2.0
+  }
+}

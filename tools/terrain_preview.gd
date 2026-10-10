@@ -13,7 +13,7 @@ func _capture(label: String) -> void:
 
 func _run() -> void:
 	var game := root.get_node("Game")
-	game.stage_mode = game.StageMode.PROCEDURAL_TEST
+	var authored_stage: RallyStage
 	for argument in OS.get_cmdline_user_args():
 		var pair := argument.trim_prefix("--").split("=", false, 1)
 		if pair.size() != 2:
@@ -22,8 +22,12 @@ func _run() -> void:
 			"length": game.stage_length = int(pair[1])
 			"seed": game.seed_value = int(pair[1])
 			"stage":
-				game.stage_mode = game.StageMode.SAVED
-				game.selected_stage_id = pair[1]
+				var catalog := StageCatalog.new()
+				authored_stage = catalog.load_stage(pair[1])
+				if authored_stage == null:
+					push_error(catalog.error)
+					quit(1)
+					return
 			"amplitude": game.terrain_settings.amplitude = float(pair[1])
 			"wavelength": game.terrain_settings.wavelength = float(pair[1])
 			"gradient": game.terrain_settings.max_gradient = float(pair[1])
@@ -34,7 +38,10 @@ func _run() -> void:
 	app.content.get_node("%Start").pressed.emit()
 	await process_frame
 	await _capture("setup")
-	app.content.get_node("%Start").pressed.emit()
+	if authored_stage == null:
+		app.content.get_node("%Start").pressed.emit()
+	else:
+		app._start_race(authored_stage)
 	var world: Node3D = app.content
 	while is_instance_valid(world) and world.generating and game.setup_error.is_empty():
 		await process_frame

@@ -36,46 +36,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="ModeLabel" type="Label" parent="Center/Panel/Column/Settings"]
-layout_mode = 2
-text = "Stage source"
-
-[node name="Mode" type="OptionButton" parent="Center/Panel/Column/Settings"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="RegionLabel" type="Label" parent="Center/Panel/Column/Settings"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Region"
-
-[node name="Region" type="OptionButton" parent="Center/Panel/Column/Settings"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="LengthFilterLabel" type="Label" parent="Center/Panel/Column/Settings"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Full stage length"
-
-[node name="LengthFilter" type="OptionButton" parent="Center/Panel/Column/Settings"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="StageLabel" type="Label" parent="Center/Panel/Column/Settings"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Stage"
-
-[node name="Stage" type="OptionButton" parent="Center/Panel/Column/Settings"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(370, 0)
-layout_mode = 2
-size_flags_horizontal = 3
-
 [node name="SeedLabel" type="Label" parent="Center/Panel/Column/Settings"]
 layout_mode = 2
 text = "Stage seed"
@@ -147,18 +107,6 @@ min_value = 16.0
 max_value = 64.0
 step = 1.0
 suffix = "m"
-
-[node name="StageDetails" type="Label" parent="Center/Panel/Column"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(500, 0)
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-autowrap_mode = 2
-
-[node name="RandomStage" type="Button" parent="Center/Panel/Column"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Pick random stage"
 
 [node name="Error" type="Label" parent="Center/Panel/Column"]
 unique_name_in_owner = true

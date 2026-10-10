@@ -29,8 +29,10 @@ func _validate() -> void:
 		check(stage.centers.size() == stage.headings.size() and stage.centers.size() == stage.distances.size(), "Station arrays differ: " + entry.id)
 		check(stage.left_edges.size() == stage.centers.size() and stage.right_edges.size() == stage.centers.size(), "Missing road edges: " + entry.id)
 		if not stage.baked_scene_path.is_empty():
-			ready_count += 1
-			check(ResourceLoader.exists(stage.baked_scene_path), "Missing baked world: " + entry.id)
+			if ResourceLoader.exists(stage.baked_scene_path):
+				ready_count += 1
+			elif "--require-baked" in OS.get_cmdline_user_args():
+				check(false, "Missing baked world: " + entry.id)
 			check(not stage.baked_fingerprint.is_empty() and stage.baked_bounds.size != Vector3.ZERO, "Missing bake metadata: " + entry.id)
 		var last_station := 0
 		for feature in stage.features:
@@ -68,25 +70,15 @@ func _validate() -> void:
 	check(catalog.draw(subset) in subset, "Randomiser ignored changed filters")
 	check(catalog.draw([]).is_empty(), "Empty pool should not pick a stage")
 	var game := root.get_node("Game")
-	game.stage_region = "All regions"
-	game.stage_length_filter = 0
-	game.selected_stage_id = ""
 	var setup: Control = load("res://scenes/ui/setup_menu.tscn").instantiate()
 	root.add_child(setup)
-	check(setup.get_node("%Start").disabled == (ready_count == 0), "Saved setup availability differs from authored worlds")
+	check(not setup.get_node("%Start").disabled, "Procedural setup should be independent of saved worlds")
+	check(setup.get_node_or_null("%Stage") == null and setup.get_node_or_null("%Mode") == null, "Saved maps are still linked in game setup")
 	setup._validate_seed("9223372036854775808")
-	check(setup.get_node("%Start").disabled == (ready_count == 0), "Saved stage availability should ignore procedural seed")
-	setup.get_node("%Mode").item_selected.emit(1)
 	check(setup.get_node("%Start").disabled, "Procedural setup accepted overflowing seed")
 	setup._validate_seed("1592598566")
 	check(not setup.get_node("%Start").disabled, "Valid procedural seed was rejected")
-	game.stage_region = "No such region"
-	setup.get_node("%Mode").item_selected.emit(0)
-	setup._populate_stages()
-	check(setup.get_node("%Start").disabled, "Empty filter pool should disable Start")
 	setup.queue_free()
-	game.stage_region = "All regions"
-	game.stage_length_filter = 0
 	if "--world" in OS.get_cmdline_user_args() and failures == 0:
 		await _validate_world(game, catalog)
 	print("Saved stage validation: %d failures; %d stages; %d baked worlds; %.1f km; three shuffle cycles" % [failures, catalog.entries.size(), ready_count, total / 1000.0])
@@ -100,14 +92,16 @@ func _validate_world(game: Node, catalog: StageCatalog) -> void:
 	check(not shortest.is_empty(), "No baked world is available to validate")
 	if shortest.is_empty():
 		return
-	game.stage_mode = game.StageMode.SAVED
-	game.selected_stage_id = shortest.id
 	game.configure_players(2)
 	game.state = game.State.DRIVING
+	var authored_stage := catalog.load_stage(shortest.id)
+	check(authored_stage != null, catalog.error)
+	if authored_stage == null:
+		return
 	var world: Node3D = load("res://scenes/world.tscn").instantiate()
 	root.add_child(world)
 	var started := Time.get_ticks_msec()
-	check(await world.start_race(), "Saved world failed: " + game.setup_error)
+	check(await world.start_race(authored_stage), "Saved world failed: " + game.setup_error)
 	if world.car_root == null:
 		world.queue_free()
 		return
